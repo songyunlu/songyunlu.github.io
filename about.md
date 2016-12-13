@@ -4,8 +4,9 @@ title:     About
 permalink: /about/
 ---
 
-Vida is a minimalist jekyll theme.
+Data Engineer @LinkerNetworks. <br/>
+#SMACK, #Spring, #DCOS, Machine Learning. I ♥ Distributed Systems.
 
-- Author: Alex Sun
-- Email:  syaningv@gmail.com
-- Github: [https://github.com/syaning/vida](https://github.com/syaning/vida)
+- Author: Jimmy Lu
+- Email:  gn00023040@gmail.com
+- Github: [https://github.com/songyunlu](https://github.com/songyunlu)

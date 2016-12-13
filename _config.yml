@@ -1,5 +1,5 @@
-title: vida
-baseurl: "/vida"
+title: DeepDive
+baseurl: ""
 
 date_format: "%Y-%m-%d"
 
@@ -11,4 +11,6 @@ permalink: pretty
 # Third-party services
 # just leave someone empty to disable it
 google_analytics:
-disqus_shortname:
+disqus_shortname: deepdive-1
+
+timezone: Asia/Taipei
