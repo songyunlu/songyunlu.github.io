@@ -23,3 +23,5 @@ Follow the instructions in the DC/OS [installation guide](https://dcos.io/docs/1
     ansible-playbook -i hosts install.yml --user {username of key pair}
   ```
 * Open port 80 and 8080 on master node to access DC/OS and Marathon UI respectively.
+
+* **These have only be tested for DC/OS 1.8.**
