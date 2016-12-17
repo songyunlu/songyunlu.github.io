@@ -6,13 +6,15 @@ main {
 }
 .site-header {
     .site-title {
-        font-weight: 300;
+        font-weight: 600;
+	font-family: Merriweather, sans-serif;
         > a {
             color: $text-color;
             text-decoration: none;
         }
     }
     .site-nav {
+	font-family: Merriweather, sans-serif;
         > a {
             color: $text-color;
             &:hover {
@@ -46,12 +48,10 @@ main {
 .post {
     position: relative;
     .post-header {
-        text-align: center;
         margin-bottom: 0;
     }
     .post-meta {
         margin: 0;
-        text-align: center;
         color: $meta-color;
         font-size: $small-font-size;
     }
