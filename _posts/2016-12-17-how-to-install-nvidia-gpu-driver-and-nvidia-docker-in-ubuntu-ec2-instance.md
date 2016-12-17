@@ -30,12 +30,15 @@ $ sudo dpkg -i /tmp/nvidia-docker*.deb && rm /tmp/nvidia-docker*.deb
 ```
 
 Next, verify the driver is installed.
+
 ```bash
 $ nvidia-smi
 ```
+
 ![]({{site.baseurl}}/images/nvidia-smi.png)
 
 And the nvidia-docker.
+
 ```bash
 $ nvidia-docker
 ```
@@ -45,6 +48,7 @@ $ nvidia-docker
 #### Error: Unable to load the kernel module 'nvidia.ko'
 
 If you see the error message like this<sup>[3](#3)</sup>
+
 ```
 Unable to load the kernel module 'nvidia.ko'.  This happens most frequently when this kernel module was built against the wrong or
          improperly configured kernel sources, with a version of gcc that differs from the one used to build the target kernel, or if a driver
@@ -54,7 +58,9 @@ Unable to load the kernel module 'nvidia.ko'.  This happens most frequently when
          Please see the log entries 'Kernel module load error' and 'Kernel messages' at the end of the file '/var/log/nvidia-installer.log'
          for more information.
 ```
+
 then 
+
 ```bash
 $ sudo apt-get install linux-image-extra-virtual
 $ reboot
