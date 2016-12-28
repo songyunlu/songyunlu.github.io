@@ -11,7 +11,7 @@ First, ssh into your EC2 ubuntu instnace then run the docker container by `nvidi
 ```bash
 sudo nvidia-docker run -d -p 8888:8888 tensorflow/tensorflow:latest-gpu
 
-# you should see the container id similar to '09b23108......' on your screen.
+# 09b23108...... (container id)
 ```
 
 Retrieve logs from the detached container.
@@ -19,7 +19,6 @@ Retrieve logs from the detached container.
 ```bash
 sudo nvidia-docker logs [container id]
 
-# logs
 # [I 04:19:58.174 NotebookApp] Writing notebook server cookie secret to /root/.local/share/jupyter/runtime/notebook_cookie_secret
 # [W 04:19:58.229 NotebookApp] WARNING: The notebook server is listening on all IP addresses and not using encryption. This is not recommended.
 # [I 04:19:58.403 NotebookApp] Serving notebooks from local directory: /notebooks
