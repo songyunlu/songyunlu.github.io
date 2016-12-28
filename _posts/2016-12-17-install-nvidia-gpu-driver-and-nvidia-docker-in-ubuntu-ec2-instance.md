@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  How To Install Nvidia GPU Driver And Nvidia Docker in Ubuntu EC2 instance
+title:  Install Nvidia GPU Driver And Nvidia Docker in Ubuntu EC2 instance
 date:   2016-12-17T21:40:00+8:00
 ---
 
@@ -59,7 +59,7 @@ Unable to load the kernel module 'nvidia.ko'.  This happens most frequently when
          for more information.
 ```
 
-then 
+execute following commands to solve the issue. 
 
 ```bash
 $ sudo apt-get install linux-image-extra-virtual
@@ -76,7 +76,7 @@ $ sudo apt-get install linux-headers-`uname -r`
 
 #### Disable nouveau
 
-This page<sup>[5](#5)</sup> shows how to disable nouveau.
+[Install Nvidia driver instead nouveau](http://askubuntu.com/questions/481414/install-nvidia-driver-instead-nouveau) shows how to disable nouveau.
 
 <br/>
 [<a name="1">1</a>] [Install Docker on Ubuntu](https://docs.docker.com/engine/installation/linux/ubuntulinux/), Docker<br/>
@@ -84,4 +84,3 @@ This page<sup>[5](#5)</sup> shows how to disable nouveau.
 [<a name="3">3</a>] [CUDA 6.5 on AWS GPU Instance Running Ubuntu 14.04](http://tleyden.github.io/blog/2014/10/25/cuda-6-dot-5-on-aws-gpu-instance-running-ubuntu-14-dot-04/), 
 Seven Story Rabbit Hole<br/>
 [<a name="4">4</a>] [NVIDIA driver install - Error: Unable to find the kernel source tree](https://ubuntuforums.org/showthread.php?t=843914), Ubuntu forums<br/>
-[<a name="5">5</a>] [Install Nvidia driver instead nouveau](http://askubuntu.com/questions/481414/install-nvidia-driver-instead-nouveau), Ask Ubuntu, StackExchange<br/>
