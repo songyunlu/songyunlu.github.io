@@ -78,7 +78,7 @@ $ sudo apt-get install linux-headers-`uname -r`
 
 [Install Nvidia driver instead nouveau](http://askubuntu.com/questions/481414/install-nvidia-driver-instead-nouveau) shows how to disable nouveau.
 
-<br/>
+### Reference
 [<a name="1">1</a>] [Install Docker on Ubuntu](https://docs.docker.com/engine/installation/linux/ubuntulinux/), Docker<br/>
 [<a name="2">2</a>] [Deploy on Amazon EC2](https://github.com/NVIDIA/nvidia-docker/wiki/Deploy-on-Amazon-EC2), nvidia-docker, Nvidia<br/>
 [<a name="3">3</a>] [CUDA 6.5 on AWS GPU Instance Running Ubuntu 14.04](http://tleyden.github.io/blog/2014/10/25/cuda-6-dot-5-on-aws-gpu-instance-running-ubuntu-14-dot-04/), 
