@@ -6,7 +6,7 @@ date:   2016-12-13T23:00:00+8:00
 
 Follow the instructions in the DC/OS [installation guide](https://dcos.io/docs/1.8/administration/installing/cloud/gce/) and beware of following points. 
 
-* Login to the gcloud first via command `gcloud auth login` or you'll got permission denied when creating instances.
+* Login to the gcloud first via command `gcloud auth login` or you'll get permission denied when creating instances.
 
 * Configurations in `dcos_gce/group_vars/all`
 

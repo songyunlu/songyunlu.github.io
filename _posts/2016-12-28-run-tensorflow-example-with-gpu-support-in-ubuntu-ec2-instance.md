@@ -1,10 +1,10 @@
 ---
 layout: post
-title:  Run Tensorflow Example with GPU support in Ubuntu EC2 Instance
+title:  Run TensorFlow Example with GPU support in Ubuntu EC2 Instance
 date:   2016-12-28T11:40:00+8:00
 ---
 
-Follow up the previous post, we can now run tensorflow with GPU docker image directly<sup>[1](#1)</sup>.
+Follow up the [previous post]({{site.baseurl}}/2016/12/17/install-nvidia-gpu-driver-and-nvidia-docker-in-ubuntu-ec2-instance/), we can now run tensorflow with GPU docker image directly<sup>[1](#1)</sup>.
 
 First, ssh into your EC2 ubuntu instnace then run the docker container by `nvidia-docker`.
 
