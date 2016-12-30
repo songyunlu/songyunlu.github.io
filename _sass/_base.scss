@@ -9,6 +9,7 @@ body {
 }
 p {
     word-break: break-word;
+    text-align: justify;
 }
 a {
     color: $link-color;
@@ -59,7 +60,7 @@ pre {
     overflow-x: auto;
 }
 code {
-	font-family:Consolas, "Liberation Mono", Courier, monospace;
+	font-family: Consolas, "Liberation Mono", Courier, monospace;
 	font-size:.8rem;
 	tab-size: 4;
 }

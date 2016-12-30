@@ -33,11 +33,11 @@ cluster = tf.train.ClusterSpec({"ps":parameter_servers, "worker":workers})
 Then execute the commands on the three instances.
 
 ```bash
-python example.py --job_name="worker" --task_index=0 # on worker 1 instance
-python example.py --job_name="worker" --task_index=1 # on worker 2 instance
-python example.py --job_name="ps" --task_index=0 # on parameter server instance
+$ python example.py --job_name="worker" --task_index=0 # on worker 1 instance
+$ python example.py --job_name="worker" --task_index=1 # on worker 2 instance
+$ python example.py --job_name="ps" --task_index=0 # on parameter server instance
 
-# You'll see the similar output on your worker instance.
+# THE OUTPUT ON YOUR TERMINAL SCREEN.
 # Step: 18700,  Epoch: 18,  Batch: 550 of 550,  Cost: 2.8933,  AvgTime: 7.90ms
 # Step: 18902,  Epoch: 19,  Batch: 100 of 550,  Cost: 2.7845,  AvgTime: 16.36ms
 # Step: 19104,  Epoch: 19,  Batch: 200 of 550,  Cost: 3.4632,  AvgTime: 15.63ms
