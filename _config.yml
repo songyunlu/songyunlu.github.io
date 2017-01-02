@@ -10,7 +10,7 @@ permalink: pretty
 
 # Third-party services
 # just leave someone empty to disable it
-google_analytics:
+google_analytics: UA-89686579-1
 disqus_shortname: deepdive-1
 
 timezone: Asia/Taipei
