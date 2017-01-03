@@ -20,14 +20,14 @@ Configure **security group** based on your internal IP range so they can talk to
 
 Based on the tensorlfow image, I've made a docker image [`gn00023040/distributed-tensorflow-example`](https://hub.docker.com/r/gn00023040/distributed-tensorflow-example/) contains the [example.py provided by Imanol](https://github.com/ischlag/distributed-tensorflow-example).
 
-```Dockerfile
+```dockerfile
 # Dockerfile
 FROM tensorflow/tensorflow:latest-gpu
 MAINTAINER Jimmy Lu <slu@linkernetworks.com>
 RUN curl -O http://blog.jimmylu.idv.tw/assets/distributed-tensorflow-example.py
 ```
 
-You can simply execute the commands below on three instances respectively to start the model training.
+You can simply execute the commands below on three instances respectively to start the training.
 
 ```bash
 # on worker 1 instance
@@ -83,7 +83,7 @@ The output on one of your worker node.
 # done
 ```
 
-Because `log_device_placement` is set to **true** in this example, you'll see a lot of logs showing where the computation takes place.
+Because `log_device_placement` is set to **true** in this example, you'll see a lot of logs showing where the computation takes places.
 
 ```bash
 # ...
