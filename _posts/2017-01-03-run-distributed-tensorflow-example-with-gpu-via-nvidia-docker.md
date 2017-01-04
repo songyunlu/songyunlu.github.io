@@ -20,7 +20,7 @@ Configure **security group** based on your internal IP range so they can talk to
 
 Based on the tensorlfow image, I've made a docker image [`gn00023040/distributed-tensorflow-example`](https://hub.docker.com/r/gn00023040/distributed-tensorflow-example/) contains the [example.py provided by Imanol](https://github.com/ischlag/distributed-tensorflow-example).
 
-```dockerfile
+```
 # Dockerfile
 FROM tensorflow/tensorflow:latest-gpu
 MAINTAINER Jimmy Lu <slu@linkernetworks.com>
