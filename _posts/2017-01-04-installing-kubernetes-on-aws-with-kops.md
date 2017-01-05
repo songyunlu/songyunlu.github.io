@@ -12,7 +12,7 @@ Here are some of my suggestions on the installation.
 
 ### Try unreleasd version of kops
 
-If you encounter issues of kops, or you want to setup latest release of kubernetes (becasue the development timeline of kops is usally fall behind kubernetes), you can install the unstable version (HEAD) of kops by homebrew on you Mac. 
+If you encounter issues setting up a cluster, or you want to setup latest version of kubernetes (becasue the development timeline of kops is usally fall behind kubernetes), you can install the unreleased version (HEAD) of kops by homebrew on you Mac. 
 
 ```bash
 $ brew update && brew install --HEAD kops
@@ -57,9 +57,9 @@ nameserver 8.8.4.4
 nameserver 192.168.0.1
 ```
 
-### Change to the custom image to create instances
+### Change to a custom image to create instances
 
-By default, Kops use debain AMI to spin up nodes. If you would like to change to a custom image (AMI), just edit the configuration of `nodes` **instance group** before kops actually creates the cluster.
+By default, Kops use debain AMI to spin up nodes. If you would like to change to a custom image (AMI), just edit the configuration of *nodes instance group* before kops actually creates the cluster.
 
 ```yaml
 # $ kops edit ig --name=$CLUSTER_NAME nodes
@@ -86,10 +86,59 @@ Type the command `aws ec2 describe-images --image-id ami-XXXXX` To find out the 
 
 Note that you can always update the spec of you instance group after the creation of the cluster.
 
+### Customized the cluster and instance group specs
+
+Follow up above section, you are free to customize the spec of the cluster and instance group. For example, you can adjust the minimum number of alived instances, the root volume size, and the machine type of instances in a instance group.
+
+```yaml
+apiVersion: kops/v1alpha2
+kind: InstanceGroup
+metadata:
+  creationTimestamp: "2017-01-04T16:27:43Z"
+  name: nodes
+spec:
+  associatePublicIp: true
+  image: kope.io/k8s-1.4-debian-jessie-amd64-hvm-ebs-2016-10-21 
+  machineType: m3.2xlarge # setting the machine type.
+  maxSize: 2
+  minSize: 1  # setting the minimum number of alived instances.
+  role: Node
+  subnets:
+  - ap-northeast-1a
+  rootVolumeSize: 100 # setting root volume size to 100GB.
+```
+
+More information could be found in [cluster_spec.md](https://github.com/kubernetes/kops/blob/master/docs/cluster_spec.md) and [instance_groups.md](https://github.com/kubernetes/kops/blob/master/docs/instance_groups.md)
+
 ### Verify the installation
 
-![]({{site.baseurl}}/images/kops-route53.png)
-![]({{site.baseurl}}/images/kops-s3.png)
-![]({{site.baseurl}}/images/kops-auto-scaling-group.png)
-![]({{site.baseurl}}/images/kops-ec2-instance.png)
+Wait for few minutes after you issue the command `kops update cluster $CLUSTER_NAME --yes`, then validate the cluster via `validate` command.
+
+```bash
+$ kops validate cluster apnortheast.k8s.linkernetworks.com
+
+# Validating cluster apnortheast.k8s.linkernetworks.com
+# 
+# INSTANCE GROUPS
+# NAME      ROLE  MACHINETYPE  MIN  MAX  SUBNETS
+# master-ap-northeast-1a  Master  m3.medium  1  1  ap-northeast-1a
+# nodes      Node  t2.medium  2  2  ap-northeast-1a
+# 
+# NODE STATUS
+# NAME              ROLE  READY
+# ip-172-20-37-26.ap-northeast-1.compute.internal    node  True
+# ip-172-20-58-48.ap-northeast-1.compute.internal    master  True
+# ip-172-20-59-130.ap-northeast-1.compute.internal  node  True
+# 
+# Your cluster apnortheast.k8s.linkernetworks.com is ready
+```
+Kops helps you to create all sorts of AWS resources required to setup kubnertes cluster. You can verify them in different AWS services.
+
+{% include image.html url="/images/kops-route53.png" description="Domain created in Route 53" %}
+
+{% include image.html url="/images/kops-s3.png" description="Configurations of the Kubernetes cluster are stored in S3" %}
+
+{% include image.html url="/images/kops-auto-scaling-group.png" description="Two auto-scaling groups for master and nodes" %}
+
+{% include image.html url="/images/kops-ec2-instance.png" description="One master node and two worker nodes" %}
 

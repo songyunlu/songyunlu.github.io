@@ -27,6 +27,9 @@ h6 {
     font-weight: 600;
     word-break: break-word;
 }
+em {
+    font-family: 'Old Standard TT', serif;
+}
 blockquote {
     font-style: italic;
     padding-left: 1rem;
@@ -34,6 +37,10 @@ blockquote {
 }
 img {
     max-width: 100%;
+    border: 1px solid #dce6f0;
+    border-radius: 3px;
+    display: block;
+    margin: 0 auto;
 }
 table {
     border-collapse: separate;
@@ -60,17 +67,17 @@ pre {
     overflow-x: auto;
 }
 code {
-	font-family: Consolas, "Liberation Mono", Courier, monospace;
-	font-size:.8rem;
-	tab-size: 4;
+    font-family: Consolas, "Liberation Mono", Courier, monospace;
+    font-size:.8rem;
+    tab-size: 4;
 }
 p code {
-	// border:1px solid #333;
-	background-color:#ddd;
-	border-radius:3px;
-	white-space:nowrap;
-	padding:3px 5px;
-	color: #CC3300;
+    // border:1px solid #333;
+    border-radius:3px;
+    background-color:#e7e7e7;
+    white-space:nowrap;
+    padding:3px 5px;
+    color: #CC3300;
 }
 hr {
     border: none;

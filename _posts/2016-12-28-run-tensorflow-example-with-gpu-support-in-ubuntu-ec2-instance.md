@@ -10,7 +10,7 @@ Follow up the [previous post]({{site.baseurl}}/2016/12/17/install-nvidia-gpu-dri
 
 Let us take a look at the architecture of Nvidia Docker images. As you can see, we have installed the CUDA driver (GPU driver) on the host machine to control and communicate with GPUs. Based on that, every GPU application in the docker container sould require [nvidia/cuda](https://hub.docker.com/r/nvidia/cuda/) (CUDA toolkit) image to get access to CUDA APIs (E.g. tensorflow docker image).
 
-![]({{site.baseurl}}/images/nvidia-docker-architecture.png)
+<span class="no-border">![]({{site.baseurl}}/images/nvidia-docker-architecture.png)</span>
 
 Please make sure that you use the right version of CUDA toolkit based on the driver, or you'll get the *Failed to initialize NVML: Driver/library version mismatch* or *CUDA driver version is insufficient for CUDA runtime version* errors when running the application. 
 
@@ -29,7 +29,7 @@ $ sudo nvidia-docker run -d -p 8888:8888 tensorflow/tensorflow:latest-gpu
 Retrieve logs from the detached container.
 
 ```bash
-$ sudo nvidia-docker logs [container id]
+$ sudo nvidia-docker logs $CONTAINER_ID
 
 # [I 04:19:58.174 NotebookApp] Writing notebook server cookie secret to /root/.local/share/jupyter/runtime/notebook_cookie_secret
 # [W 04:19:58.229 NotebookApp] WARNING: The notebook server is listening on all IP addresses and not using encryption. This is not recommended.

@@ -64,3 +64,22 @@ main {
         }
     }
 }
+.image {
+    margin-bottom: 2em;
+    tbody {
+        tr {
+            td {
+                border: none;
+                padding: 0;
+            }
+        }
+    }
+    caption {
+        font-family: 'Old Standard TT', serif;
+        font-size: $small-font-size;
+        line-height: 2.5;
+    }
+}
+.no-border img {
+    border: none;
+}
