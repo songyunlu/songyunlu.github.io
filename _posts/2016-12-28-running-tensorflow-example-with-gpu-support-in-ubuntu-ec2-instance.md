@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  Run TensorFlow Example with GPU support in Ubuntu EC2 Instance
+title:  Running TensorFlow Example with GPU support in Ubuntu EC2 Instance
 date:   2016-12-28T11:40:00+8:00
 ---
 

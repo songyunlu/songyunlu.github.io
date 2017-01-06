@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  Run Distributed TensorFlow Example with GPU via Nvidia Docker
+title:  Running Distributed TensorFlow Example with GPU via Nvidia Docker
 date:   2017-01-03T15:40:00+8:00
 ---
 

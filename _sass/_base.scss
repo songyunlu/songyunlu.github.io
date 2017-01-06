@@ -43,10 +43,9 @@ img {
     margin: 0 auto;
 }
 table {
-    border-collapse: separate;
+    border-collapse: collapse;
     border-spacing: 0;
     max-width: 100%;
-    width: 100%;
 }
 th,
 td {
@@ -56,11 +55,11 @@ td {
 th {
     text-align: left;
     vertical-align: bottom;
-    border-bottom: 2px solid $border-color;
+    border: 1px solid $border-color;
 }
 td {
     vertical-align: top;
-    border-bottom: 1px solid $border-color;
+    border: 1px solid $border-color;
 }
 pre {
     padding: 1.25rem;
@@ -72,7 +71,6 @@ code {
     tab-size: 4;
 }
 p code {
-    // border:1px solid #333;
     border-radius:3px;
     background-color:#e7e7e7;
     white-space:nowrap;

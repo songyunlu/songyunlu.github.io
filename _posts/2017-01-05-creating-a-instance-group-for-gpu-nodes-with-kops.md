@@ -65,7 +65,7 @@ Check the result by `kops get ig gpu-nodes`.
 # gpu-nodes  Node  g2.2xlarge  1  10  ap-northeast-1a
 ```
 
-You should see one more auto scaling group for GPU nodes is created on AWS web console.
+You should see one more auto scaling group for GPU nodes is created from AWS web console.
 
 ![]({{site.baseurl}}/images/auto-scaling-group-for-gpu-nodes.png)
 

@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  Install Nvidia GPU Driver And Nvidia Docker in Ubuntu EC2 instance
+title:  Installing Nvidia GPU Driver And Nvidia Docker in Ubuntu EC2 instance
 date:   2016-12-17T21:40:00+8:00
 ---
 
