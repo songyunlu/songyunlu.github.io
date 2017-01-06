@@ -11,4 +11,4 @@ Data Engineer @LinkerNetworks. <br/>
 
 - Email:  gn00023040 \[at\] gmail.com
 - Github: [https://github.com/songyunlu](https://github.com/songyunlu)
-- Linkedin: [https://tw.linkedin.com/in/songyunlu](https://tw.linkedin.com/in/songyunlu)
+- Linkedin: [https://www.linkedin.com/in/songyunlu](https://www.linkedin.com/in/songyunlu)
