@@ -216,7 +216,7 @@ spec:
       dnsPolicy: Default
       # nodeSelector: 
       #   key/value pairs match to your node labels
- ```
+```
 
 * Change the **namespace** to `kube-system`.
 * Make sure the **keys** of AWS credential environment variables in your kubernetes secret are identical to `aws-access-key-id` and `aws-secret-access-key`. 
