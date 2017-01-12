@@ -70,6 +70,13 @@ code {
     font-size:.8rem;
     tab-size: 4;
 }
+ul li code.highlighter-rouge {
+    border-radius:3px;
+    background-color:#e7e7e7;
+    white-space:nowrap;
+    padding:3px 5px;
+    color: #CC3300;
+}
 p code {
     border-radius:3px;
     background-color:#e7e7e7;
