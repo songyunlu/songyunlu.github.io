@@ -57,6 +57,14 @@ nameserver 8.8.4.4
 nameserver 192.168.0.1
 ```
 
+### Specify Kubernetes version
+
+You can specify the version of kubernetes by `--kubernetes-version` argument of `create cluster` command.
+
+```bash
+$ kops create cluster --zones ap-northeast-1a,apnortheast-1c --kubernetes-version v1.5.1 apnortheast.k8s.linkernetworks.com
+```
+
 ### Change to a custom image to create instances
 
 By default, Kops use debain AMI to spin up nodes. If you would like to change to a custom image (AMI), just edit the configuration of *nodes instance group* before kops actually creates the cluster.
