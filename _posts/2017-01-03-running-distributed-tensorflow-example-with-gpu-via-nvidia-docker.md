@@ -4,7 +4,7 @@ title:  Running Distributed TensorFlow Example with GPU via Nvidia Docker
 date:   2017-01-03T15:40:00+8:00
 ---
 
-If you had followed [this]({{site.baseurl}}/2016/12/17/install-nvidia-gpu-driver-and-nvidia-docker-in-ubuntu-ec2-instance/) and [this]({{site.baseurl}}/2016/12/28/run-tensorflow-example-with-gpu-support-in-ubuntu-ec2-instance/) to setup a EC2 instance with GPU support, you are ready to run distirbuted tensorflow examples. 
+If you had followed [this]({{site.baseurl}}/2016/12/17/installing-nvidia-gpu-driver-and-nvidia-docker-in-ubuntu-ec2-instance/) and [this]({{site.baseurl}}/2016/12/28/running-tensorflow-example-with-gpu-support-in-ubuntu-ec2-instance/) to setup a EC2 instance with GPU support, you are ready to run distirbuted tensorflow examples. 
 
 You might want to create image (AMI) of this instnace first so you can create more instances for running distributed examples.
 
