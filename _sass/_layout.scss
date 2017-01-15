@@ -1,6 +1,6 @@
 @charset "utf-8";
 main {
-    max-width: 48rem;
+    max-width: 46rem;
     margin: 0 auto 3rem;
     padding: 0 2rem;
 }
@@ -38,6 +38,8 @@ main {
             color: $meta-color;
             margin-right: 1.5rem;
             font-size: $small-font-size;
+            float: left;
+            width: 70px;
         }
         a {
             color: $text-color;
