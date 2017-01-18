@@ -6,12 +6,14 @@ layout: default
     <ul class="posts">
         <table>
         {% for post in site.posts %}
-        <!-- <li><span>{{ post.date | date: site.date_format }}</span><a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a></li> -->
+        <li><span>{{ post.date | date: site.date_format }}</span><a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a></li>
+        {% endfor %}
+        <!--
         <tr>
             <td class="published">{{ post.date | date: site.date_format }}</td>
             <td class="title"><a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a></td>
         <tr>
-        {% endfor %}
+        -->
         </table>
     </ul>
 </div>
