@@ -32,18 +32,35 @@ main {
 .posts {
     list-style: none;
     padding: 0;
-    > li {
-        line-height: 1.75;
-        span {
-            color: $meta-color;
-            margin-right: 1.5rem;
-            font-size: $small-font-size;
-            float: left;
-            width: 70px;
+    // > li {
+    //     line-height: 1.75;
+    //     span {
+    //         color: $meta-color;
+    //         margin-right: 1.5rem;
+    //         font-size: $small-font-size;
+    //     }
+    //     a {
+    //         color: $text-color;
+    //         text-decoration: none;
+    //     }
+    // }
+    > table {
+        border: none;
+        width: 100%;
+        td {
+            border: none;
+            padding: 2px;
         }
-        a {
-            color: $text-color;
-            text-decoration: none;
+        td.published {
+            color: $meta-color;
+            // margin-right: 1.5rem;
+            font-size: $small-font-size;
+        }
+        td.title {
+            a {
+                color: $text-color;
+                text-decoration: none;
+            }
         }
     }
 }
