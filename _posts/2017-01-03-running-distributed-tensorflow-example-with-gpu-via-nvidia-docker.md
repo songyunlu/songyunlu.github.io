@@ -33,7 +33,7 @@ You can simply execute the commands below on three instances respectively to sta
 # on worker 1 instance
 # $WORKER_ADDRESS_LIST is a comma-separated address list of your workers. E.g. 172.31.8.107:2222,172.31.8.108:2222
 # $PARAMETER_SERVER_ADDRESS_LIST is a comma-separated address list of your parameter servers. E.g. 172.31.21.167:2222
-$ sudo docker run -d -p 2222:2222 gn00023040/distributed-tensorflow-example \
+$ sudo docker run -d -p 2222:2222 `curl -s http://localhost:3476/docker/cli` gn00023040/distributed-tensorflow-example \
       python distributed-tensorflow-example.py \
           --workers="$WORKER_ADDRESS_LIST" \
           --parameter_servers="$PARAMETER_SERVER_ADDRESS_LIST" \
@@ -43,7 +43,7 @@ $ sudo docker run -d -p 2222:2222 gn00023040/distributed-tensorflow-example \
 
 ```bash
 # on worker 2 instance
-$ sudo docker run -d -p 2222:2222 gn00023040/distributed-tensorflow-example \
+$ sudo docker run -d -p 2222:2222 `curl -s http://localhost:3476/docker/cli` gn00023040/distributed-tensorflow-example \
       python distributed-tensorflow-example.py \
           --workers="$WORKER_ADDRESS_LIST" \
           --parameter_servers="$PARAMETER_SERVER_ADDRESS_LIST" \
