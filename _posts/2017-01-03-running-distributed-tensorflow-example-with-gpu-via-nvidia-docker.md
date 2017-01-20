@@ -24,7 +24,7 @@ Based on the tensorlfow image, I've made a docker image [`gn00023040/distributed
 # Dockerfile
 FROM tensorflow/tensorflow:latest-gpu
 MAINTAINER Jimmy Lu <slu@linkernetworks.com>
-RUN curl -O http://blog.jimmylu.idv.tw/assets/distributed-tensorflow-example.py
+RUN curl -O https://deepdive.tw/assets/distributed-tensorflow-example.py
 ```
 
 You can simply execute the commands below on three instances respectively to start the training.
