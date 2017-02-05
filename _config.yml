@@ -22,5 +22,3 @@ timezone: Asia/Taipei
 gems:
   - jekyll-feed
   - jekyll-seo-tag
-  - jemoji
-  - jekyll-mentions
