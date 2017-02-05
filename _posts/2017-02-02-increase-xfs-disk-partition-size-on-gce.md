@@ -20,7 +20,7 @@ It's not uncommon to face **"out of disk space"** issue in a data engineer's dai
 ![]({{site.baseurl}}/images/attach-the-fully-filled-disk-to-an-instance.png)
 
 6. Login to the instance and execute following commands to make the change visible.
-  
+
   ```bash
   $ lsblk # list all block devices
 
