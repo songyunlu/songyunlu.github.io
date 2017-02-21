@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  Increase XFS Disk Partition Size on GCE
+title:  Increasing XFS Disk Partition Size on GCE
 date:   2017-02-02T16:00:00+8:00
 ---
 
