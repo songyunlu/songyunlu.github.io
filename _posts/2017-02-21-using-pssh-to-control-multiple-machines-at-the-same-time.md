@@ -22,6 +22,7 @@ To use the keyfile with pssh, you need to add the file `~/.ssh/config` with host
 ```bash
 # for the machines on aws
 Host *.compute.amazonaws.com
+    StrictHostKeyChecking no # avoid SSH's host verification
     IdentityFile ~/.ssh/$KEY_FILE
 ```
 
@@ -74,7 +75,7 @@ $ pssh --help
 # 
 # Example: pssh -h hosts.txt -l irb2 -o /tmp/foo uptime
 
-$ pssh -i -h host.text date
+$ pssh -i -h host.txt date
 
 # [1] 16:42:00 [SUCCESS] ubuntu@ec2-54-249-57-184.ap-northeast-1.compute.amazonaws.com
 # Tue Feb 21 08:42:00 UTC 2017
