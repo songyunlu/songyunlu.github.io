@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  Using pssh to Contorl Multiple Machines at the Smae Time
+title:  Using pssh to Contorl Multiple Machines at the Same Time
 date:   2017-02-21T12:40:00+8:00
 ---
 

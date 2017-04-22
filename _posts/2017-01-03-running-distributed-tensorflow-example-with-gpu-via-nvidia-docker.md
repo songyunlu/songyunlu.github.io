@@ -22,7 +22,7 @@ Based on the tensorlfow image, I've made a docker image [`gn00023040/distributed
 
 ```
 # Dockerfile
-FROM tensorflow/tensorflow:latest-gpu
+FROM tensorflow/tensorflow:0.12.1-py3
 MAINTAINER Jimmy Lu <slu@linkernetworks.com>
 RUN curl -O https://deepdive.tw/assets/distributed-tensorflow-example.py
 ```
