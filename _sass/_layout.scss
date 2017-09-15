@@ -6,7 +6,9 @@ main {
 }
 .site-header {
     .site-title {
-        font-weight: 600;
+    font-weight: 600;
+    margin-top: 0px;
+    padding-top: 1em;
 	font-family: Merriweather, sans-serif;
         > a {
             color: $text-color;
