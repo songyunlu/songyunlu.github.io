@@ -6,8 +6,8 @@ permalink: /about/
 
 # Jimmy Lu
 
-Data Engineer @LinkerNetworks. <br/>
-#SMACK, #Spring, #DCOS, Machine Learning. I ♥ Distributed Systems.
+Software Engineer @hyvesolutions. <br/> 
+#SMACK, #Kubernetes, #Cloud, #Microservices. I ♥ #DistributedSystems.
 
 - Email:  gn00023040 \[at\] gmail.com
 - Github: [https://github.com/songyunlu](https://github.com/songyunlu)
