@@ -6,7 +6,7 @@ permalink: /about/
 
 # Jimmy Lu
 
-Software Engineer @hyvesolutions. <br/> 
+Principal Software Engineer @DigitalRiverInc. <br/> 
 #SMACK, #Kubernetes, #Cloud, #Microservices. I ♥ #DistributedSystems.
 
 - Email:  gn00023040 \[at\] gmail.com
