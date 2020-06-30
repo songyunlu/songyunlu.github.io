@@ -19,6 +19,6 @@ disqus_shortname: deepdive-1
 
 timezone: Asia/Taipei
 
-gems:
+plugins:
   - jekyll-feed
   - jekyll-seo-tag
