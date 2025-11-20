@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heap Sort Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar for cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        /* Animation for description text */
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+        
+        /* Ensure tree view container handles scrolling gracefully */
+        .tree-container {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Settings, Network, BarChart3 } from 'lucide-react';
+
+        const HeapSortVisualizer = () => {
+            // -- State --
+            const [arraySize, setArraySize] = useState(15);
+            const [animationSpeed, setAnimationSpeed] = useState(500); 
+            const [array, setArray] = useState([]);
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [isSorted, setIsSorted] = useState(false);
+            const [viewMode, setViewMode] = useState('tree'); // 'bars' or 'tree'
+            
+            // Refs
+            const timerRef = useRef(null);
+            const scrollContainerRef = useRef(null); // Ref for scrolling centering
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-600',
+                compare: 'bg-amber-500',
+                overwrite: 'bg-red-500', // Used for Swaps
+                sorted: 'bg-emerald-500',
+                range: 'bg-indigo-500',   // Active Heap Area
+                activeBar: 'bg-indigo-500',
+                
+                // SVG specific hex codes for tree
+                svgDefault: '#475569', // slate-600
+                svgCompare: '#f59e0b', // amber-500
+                svgOverwrite: '#ef4444', // red-500
+                svgSorted: '#10b981', // emerald-500
+                svgRange: '#6366f1', // indigo-500
+                svgText: '#f1f5f9' // slate-100
+            };
+
+            // -- Algorithm Logic --
+            const generateArray = useCallback((size) => {
+                const newArray = Array.from({ length: size }, () => Math.floor(Math.random() * 50) + 5);
+                return newArray;
+            }, []);
+
+            const generateSteps = (initialArray) => {
+                const stepsLog = [];
+                const arr = [...initialArray];
+                const n = arr.length;
+
+                // Initial state
+                stepsLog.push({
+                    array: [...arr],
+                    type: 'initial',
+                    range: [0, n - 1],
+                    sortedStart: n, // Nothing sorted yet
+                    description: "Initial array generated. Ready to build Max Heap."
+                });
+
+                // Helper to swap and log
+                const swap = (i, j, heapSize, sortedStart, description) => {
+                    const temp = arr[i];
+                    arr[i] = arr[j];
+                    arr[j] = temp;
+                    
+                    stepsLog.push({
+                        array: [...arr],
+                        type: 'overwrite', // 'overwrite' color for swaps
+                        range: [0, heapSize - 1],
+                        highlights: [i, j],
+                        sortedStart: sortedStart,
+                        description: description
+                    });
+                };
+
+                // Heapify Function
+                const heapify = (n, i, currentHeapSize, currentSortedStart) => {
+                    let largest = i;
+                    let left = 2 * i + 1;
+                    let right = 2 * i + 2;
+
+                    // Log comparison: Left Child
+                    if (left < n) {
+                        stepsLog.push({
+                            array: [...arr],
+                            type: 'compare',
+                            range: [0, currentHeapSize - 1],
+                            highlights: [largest, left],
+                            sortedStart: currentSortedStart,
+                            description: `Comparing parent ${arr[largest]} with left child ${arr[left]}.`
+                        });
+                        if (arr[left] > arr[largest]) {
+                            largest = left;
+                        }
+                    }
+
+                    // Log comparison: Right Child
+                    if (right < n) {
+                        stepsLog.push({
+                            array: [...arr],
+                            type: 'compare',
+                            range: [0, currentHeapSize - 1],
+                            highlights: [largest, right],
+                            sortedStart: currentSortedStart,
+                            description: `Comparing larger ${arr[largest]} with right child ${arr[right]}.`
+                        });
+                        if (arr[right] > arr[largest]) {
+                            largest = right;
+                        }
+                    }
+
+                    // Swap and Recursion
+                    if (largest !== i) {
+                        swap(i, largest, currentHeapSize, currentSortedStart, `Swapping ${arr[i]} with larger child ${arr[largest]}.`);
+                        heapify(n, largest, currentHeapSize, currentSortedStart);
+                    }
+                };
+
+                // Phase 1: Build Max Heap
+                for (let i = Math.floor(n / 2) - 1; i >= 0; i--) {
+                    stepsLog.push({
+                        array: [...arr],
+                        type: 'info',
+                        range: [0, n - 1],
+                        highlights: [i],
+                        sortedStart: n,
+                        description: `Heapifying subtree rooted at index ${i}.`
+                    });
+                    heapify(n, i, n, n);
+                }
+
+                stepsLog.push({
+                    array: [...arr],
+                    type: 'info',
+                    range: [0, n - 1],
+                    sortedStart: n,
+                    description: "Max Heap built. The largest element is now at the root (index 0)."
+                });
+
+                // Phase 2: Extract elements
+                for (let i = n - 1; i > 0; i--) {
+                    // Swap root (max) with end
+                    swap(0, i, i + 1, n, `Moving max element ${arr[0]} to end (index ${i}).`);
+                    
+                    // Mark as sorted locally
+                    stepsLog.push({
+                        array: [...arr],
+                        type: 'info',
+                        range: [0, i - 1],
+                        sortedStart: i, // Elements from i to end are sorted
+                        description: `${arr[i]} is now sorted.`
+                    });
+
+                    // Heapify the reduced heap
+                    heapify(i, 0, i, i);
+                }
+                
+                // Final finished state
+                stepsLog.push({
+                    array: [...arr],
+                    type: 'finished',
+                    range: [],
+                    sortedStart: 0,
+                    description: "Heap Sort Complete. The array is fully sorted."
+                });
+
+                return stepsLog;
+            };
+
+            // -- Effects --
+            useEffect(() => {
+                reset();
+            }, [arraySize]); 
+
+            const reset = () => {
+                setIsPlaying(false);
+                setIsSorted(false);
+                setCurrentStepIndex(0);
+                const newArr = generateArray(arraySize);
+                setArray(newArr);
+                const generatedSteps = generateSteps(newArr);
+                setSteps(generatedSteps);
+            };
+
+            useEffect(() => {
+                if (isPlaying) {
+                timerRef.current = setInterval(() => {
+                    setCurrentStepIndex((prev) => {
+                    if (prev < steps.length - 1) {
+                        return prev + 1;
+                    } else {
+                        setIsPlaying(false);
+                        setIsSorted(true);
+                        clearInterval(timerRef.current);
+                        return prev;
+                    }
+                    });
+                }, 2000 - animationSpeed);
+                } else {
+                clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps.length, animationSpeed]);
+
+
+            // -- Controls --
+            const handleNext = () => {
+                if (currentStepIndex < steps.length - 1) {
+                    setCurrentStepIndex(prev => prev + 1);
+                    setIsPlaying(false);
+                } else {
+                    setIsSorted(true);
+                }
+            };
+
+            const handlePrev = () => {
+                if (currentStepIndex > 0) {
+                    setCurrentStepIndex(prev => prev - 1);
+                    setIsPlaying(false);
+                    setIsSorted(false);
+                }
+            };
+
+            const togglePlay = () => {
+                if (currentStepIndex === steps.length - 1) { 
+                    reset();
+                    setTimeout(() => setIsPlaying(true), 100); 
+                } else {
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+
+            // -- Render Helpers --
+            const getCurrentStep = () => steps[currentStepIndex] || { array: array, description: "Ready to sort", type: 'initial' };
+
+            const getStateColorKey = (index) => {
+                const step = getCurrentStep();
+                // Global finished state
+                if (isSorted || step.type === 'finished') return 'sorted';
+                
+                // Sorted tail
+                if (step.sortedStart !== undefined && index >= step.sortedStart) return 'sorted';
+
+                // Highlights
+                if (step.highlights && step.highlights.includes(index)) {
+                    if (step.type === 'compare') return 'compare';
+                    if (step.type === 'overwrite') return 'overwrite';
+                }
+
+                // Active Heap Range
+                if (step.range && index >= step.range[0] && index <= step.range[1]) return 'range';
+                
+                return 'default';
+            };
+
+            const getBarColor = (index) => {
+                const stateKey = getStateColorKey(index);
+                if (stateKey === 'sorted') return COLORS.sorted;
+                if (stateKey === 'compare') return COLORS.compare;
+                if (stateKey === 'overwrite') return COLORS.overwrite;
+                if (stateKey === 'range') return COLORS.activeBar;
+                return COLORS.default;
+            };
+
+            const getBoxColor = (index) => {
+                const stateKey = getStateColorKey(index);
+                if (stateKey === 'sorted') return 'bg-emerald-600 text-white';
+                if (stateKey === 'compare') return 'bg-amber-600 text-white';
+                if (stateKey === 'overwrite') return 'bg-red-600 text-white';
+                if (stateKey === 'range') return 'bg-indigo-500 text-white';
+                return 'bg-slate-700 text-slate-300';
+            };
+            
+            const getSVGColor = (index) => {
+                const stateKey = getStateColorKey(index);
+                if (stateKey === 'sorted') return COLORS.svgSorted;
+                if (stateKey === 'compare') return COLORS.svgCompare;
+                if (stateKey === 'overwrite') return COLORS.svgOverwrite;
+                if (stateKey === 'range') return COLORS.svgRange;
+                return COLORS.svgDefault;
+            };
+
+            // -- Tree Layout Helper --
+            const NODE_RADIUS = 22;
+            const VERTICAL_SPACING = 80;
+            const HORIZONTAL_SPACING = 100; // Space allocated per leaf node
+
+            const { treePositions, canvasWidth, canvasHeight } = useMemo(() => {
+                const positions = [];
+                const levels = Math.floor(Math.log2(arraySize));
+                const leafCount = Math.pow(2, levels);
+                
+                // Calculate required width: Leaf Count * Spacing per node
+                const calculatedWidth = Math.max(800, leafCount * HORIZONTAL_SPACING); 
+                const calculatedHeight = (levels + 1) * VERTICAL_SPACING + 100;
+
+                const assignPosition = (idx, x, y, levelWidth) => {
+                    if (idx >= arraySize) return;
+                    
+                    positions[idx] = { x, y };
+                    
+                    const nextLevelWidth = levelWidth / 2;
+                    assignPosition(2 * idx + 1, x - nextLevelWidth, y + VERTICAL_SPACING, nextLevelWidth); // Left
+                    assignPosition(2 * idx + 2, x + nextLevelWidth, y + VERTICAL_SPACING, nextLevelWidth); // Right
+                };
+
+                // Initial call from Root
+                assignPosition(0, calculatedWidth / 2, 50, calculatedWidth / 4);
+                
+                return { treePositions: positions, canvasWidth: calculatedWidth, canvasHeight: calculatedHeight };
+            }, [arraySize]);
+            
+            // -- Scroll to Center Effect --
+            useEffect(() => {
+                if (viewMode === 'tree' && scrollContainerRef.current) {
+                    const container = scrollContainerRef.current;
+                    // Center the view: (Content Width - Viewport Width) / 2
+                    const scrollX = (container.scrollWidth - container.clientWidth) / 2;
+                    if (scrollX > 0) {
+                        container.scrollLeft = scrollX;
+                    }
+                }
+            }, [arraySize, viewMode, canvasWidth]); // Run when size or mode changes
+
+
+            const currentData = steps[currentStepIndex]?.array || array;
+            const currentDesc = steps[currentStepIndex]?.description || "Press Play to start sorting.";
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Top Bar */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4" },
+                    
+                    /* Title */
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                    React.createElement(Settings, { size: 28, className: "text-blue-400" }),
+                    React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-blue-400" }, "Heap Sort")
+                    ),
+
+                    /* Global Controls */
+                    React.createElement("div", { className: "flex flex-grow items-center justify-center gap-4 flex-wrap" },
+                    React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement("span", { className: "text-xs text-slate-400" }, "SIZE"),
+                        React.createElement("input", {
+                        type: "range", min: "5", max: "31", step: "1",
+                        value: arraySize,
+                        onChange: (e) => setArraySize(Number(e.target.value)),
+                        disabled: isPlaying,
+                        className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-sm text-slate-300" }, arraySize)
+                    ),
+
+                    React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement("span", { className: "text-xs text-slate-400" }, "SPEED"),
+                        React.createElement("input", {
+                        type: "range", min: "100", max: "1900", step: "100",
+                        value: animationSpeed,
+                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                        className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                        })
+                    ),
+
+                    React.createElement("div", { className: "flex items-center gap-2 ml-4" },
+                        React.createElement("button", { onClick: reset, className: "p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-all", title: "Reset" },
+                        React.createElement(RotateCcw, { size: 20 })
+                        ),
+                        React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-1 text-blue-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
+                        React.createElement(SkipBack, { size: 20 })
+                        ),
+                        React.createElement("button", { 
+                        onClick: togglePlay, 
+                        className: "p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-lg shadow-blue-900/50 transition-all hover:scale-105 active:scale-95"
+                        },
+                        isPlaying 
+                            ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                            : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-1" })
+                        ),
+                        React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-1 text-blue-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
+                        React.createElement(SkipForward, { size: 20 })
+                        )
+                    )
+                    ),
+
+                    /* View Mode & Legend */
+                    React.createElement("div", { className: "flex flex-col items-end gap-2 md:ml-auto" },
+                         /* View Toggle */
+                         React.createElement("div", { className: "flex bg-slate-900 p-1 rounded-lg border border-slate-700" },
+                             React.createElement("button", { 
+                                 onClick: () => setViewMode('tree'),
+                                 className: `p-1.5 rounded-md transition-all flex items-center gap-2 text-xs font-medium ${viewMode === 'tree' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`
+                             }, React.createElement(Network, { size: 14 }), "Tree"),
+                             React.createElement("button", { 
+                                 onClick: () => setViewMode('bars'),
+                                 className: `p-1.5 rounded-md transition-all flex items-center gap-2 text-xs font-medium ${viewMode === 'bars' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-slate-200'}`
+                             }, React.createElement(BarChart3, { size: 14 }), "Bars")
+                         ),
+                        
+                         /* Mini Legend */
+                        React.createElement("div", { className: "flex flex-wrap justify-end gap-x-4 gap-y-2 text-[10px] text-slate-300" },
+                            React.createElement("div", { className: "flex items-center gap-1" },
+                                React.createElement("div", { className: `w-2 h-2 rounded-full ${COLORS.activeBar}` }), "Active"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-1" },
+                                React.createElement("div", { className: `w-2 h-2 rounded-full ${COLORS.compare}` }), "Compare"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-1" },
+                                React.createElement("div", { className: `w-2 h-2 rounded-full ${COLORS.overwrite}` }), "Swap"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-1" },
+                                React.createElement("div", { className: `w-2 h-2 rounded-full ${COLORS.sorted}` }), "Sorted"
+                            )
+                        )
+                    )
+                ),
+
+                /* Main Content */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
+                    
+                    /* Description Box */
+                    React.createElement("div", { className: "min-h-[70px] bg-slate-700/50 rounded-lg border border-slate-600 p-4 flex items-center justify-center shadow-inner" },
+                    React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                    ),
+
+                    /* Array Representation (Always Visible for Context) */
+                    React.createElement("div", { className: "flex flex-col items-center w-full" },
+                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3" }, "ARRAY INDEX"),
+                    React.createElement("div", { className: "flex justify-center flex-wrap w-full gap-1 sm:gap-2 px-4" },
+                        currentData.map((val, idx) => 
+                        React.createElement("div", { 
+                            key: idx, 
+                            className: `w-full max-w-[2.5rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-base transition-all duration-200 ${getBoxColor(idx)} border border-slate-600`
+                        },
+                            React.createElement("span", null, val),
+                            React.createElement("span", { className: "text-[8px] font-normal text-slate-400 leading-none mt-0.5 opacity-70" }, idx)
+                        )
+                        )
+                    )
+                    ),
+
+                    /* Visualization Area */
+                    React.createElement("div", { className: "relative w-full h-[350px] sm:h-[450px] bg-slate-900 rounded-lg border border-slate-700 overflow-hidden" },
+                        /* Grid Background */
+                        React.createElement("div", { className: "absolute inset-0 opacity-10 pointer-events-none", style: { backgroundImage: 'radial-gradient(#64748b 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                        
+                        /* View Mode Switch */
+                        viewMode === 'bars' 
+                        ? (
+                            /* BAR CHART VIEW */
+                            React.createElement("div", { className: "absolute inset-0 flex items-end justify-center p-4 gap-1 sm:gap-2 z-10" },
+                                currentData.map((val, idx) => {
+                                const heightPct = (val / 60) * 100;
+                                return React.createElement("div", { key: idx, className: "h-full flex flex-col items-center justify-end w-full max-w-[3rem] group" },
+                                    React.createElement("span", { className: "text-[10px] text-slate-200 mb-1 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
+                                    React.createElement("div", { 
+                                    className: `w-full rounded-t-md transition-all duration-200 ease-in-out ${getBarColor(idx)}`,
+                                    style: { height: `${heightPct}%` }
+                                    })
+                                );
+                                })
+                            )
+                        ) 
+                        : (
+                            /* TREE VIEW WITH SCROLL SUPPORT */
+                            React.createElement("div", { 
+                                className: "tree-container custom-scrollbar w-full h-full",
+                                ref: scrollContainerRef // Attached Ref here
+                            },
+                                React.createElement("div", { 
+                                    className: "flex justify-center min-h-full",
+                                    style: { minWidth: '100%', width: 'fit-content', margin: '0 auto' } 
+                                },
+                                    React.createElement("svg", { 
+                                        width: canvasWidth,
+                                        height: canvasHeight,
+                                        viewBox: `0 0 ${canvasWidth} ${canvasHeight}`,
+                                        className: "block" 
+                                    },
+                                        /* Render Connections First (So they are behind nodes) */
+                                        currentData.map((_, idx) => {
+                                            if (idx === 0) return null; // Root has no parent
+                                            const parentIdx = Math.floor((idx - 1) / 2);
+                                            if (parentIdx >= treePositions.length) return null;
+                                            
+                                            const start = treePositions[parentIdx];
+                                            const end = treePositions[idx];
+                                            if (!start || !end) return null;
+
+                                            return React.createElement("line", {
+                                                key: `link-${idx}`,
+                                                x1: start.x, y1: start.y,
+                                                x2: end.x, y2: end.y,
+                                                stroke: "#334155", // slate-700
+                                                strokeWidth: "2",
+                                                className: "transition-all duration-200"
+                                            });
+                                        }),
+
+                                        /* Render Nodes */
+                                        currentData.map((val, idx) => {
+                                            const pos = treePositions[idx];
+                                            if (!pos) return null;
+
+                                            return React.createElement("g", { key: `node-${idx}` },
+                                                React.createElement("circle", {
+                                                    cx: pos.x, cy: pos.y,
+                                                    r: NODE_RADIUS, 
+                                                    fill: getSVGColor(idx),
+                                                    stroke: "#1e293b", 
+                                                    strokeWidth: "1.5",
+                                                    className: "transition-colors duration-200 ease-in-out"
+                                                }),
+                                                React.createElement("text", {
+                                                    x: pos.x, y: pos.y,
+                                                    dy: "6", // Vertically centered for font size 16
+                                                    textAnchor: "middle",
+                                                    fill: "white",
+                                                    fontSize: "16", 
+                                                    fontWeight: "bold",
+                                                    className: "pointer-events-none select-none font-sans"
+                                                }, val)
+                                            );
+                                        })
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    /* Footer */
+                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                    React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                    React.createElement("div", { className: "w-24 sm:w-40 h-1 bg-slate-700 rounded-full" },
+                        React.createElement("div", { 
+                        className: "h-full bg-blue-500 rounded-full transition-all duration-100",
+                        style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
+                        })
+                    ),
+                    React.createElement("span", null, isSorted ? "Sorted" : "Sorting...")
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(HeapSortVisualizer));
+    </script>
+</body>
+</html>

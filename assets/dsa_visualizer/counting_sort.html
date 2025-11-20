@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Counting Sort Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Settings, BarChart3 } from 'lucide-react';
+
+        const CountingSortVisualizer = () => {
+            // -- Configuration --
+            const MAX_VAL = 9; // Range 0-9 for clean visualization
+            
+            // -- State --
+            const [arraySize, setArraySize] = useState(10);
+            const [animationSpeed, setAnimationSpeed] = useState(1000); 
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [isSorted, setIsSorted] = useState(false);
+            
+            // Initial State Holders
+            // We keep these to reset correctly without re-generating random numbers immediately
+            const [initialArray, setInitialArray] = useState([]);
+
+            // Refs
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-600',
+                scan: 'bg-blue-500',      // Scanning input
+                match: 'bg-amber-500',    // Incrementing count
+                accumulate: 'bg-purple-500', // Prefix sum
+                placing: 'bg-emerald-500',   // Moving to output
+                finished: 'bg-emerald-600',
+                inactive: 'bg-slate-800 text-slate-600 border-slate-700'
+            };
+
+            // -- Algorithm Logic --
+            const generateRandomArray = (size) => {
+                return Array.from({ length: size }, () => Math.floor(Math.random() * (MAX_VAL + 1)));
+            };
+
+            const generateSteps = (inputArr) => {
+                const stepsLog = [];
+                const n = inputArr.length;
+                const countArr = new Array(MAX_VAL + 1).fill(0);
+                const outputArr = new Array(n).fill(null); // Use null to represent empty
+
+                // Helper to push state
+                const pushStep = (type, desc, highlights = {}) => {
+                    stepsLog.push({
+                        type,
+                        description: desc,
+                        inputState: [...inputArr],
+                        countState: [...countArr],
+                        outputState: [...outputArr],
+                        highlights // { inputIdx, countIdx, outputIdx }
+                    });
+                };
+
+                // 1. Initial State
+                pushStep('start', 'Initial array generated. Range of values: 0 to 9.');
+
+                // 2. Counting Phase
+                for (let i = 0; i < n; i++) {
+                    const val = inputArr[i];
+                    
+                    // Highlight scanning
+                    pushStep('scan', `Scanning index ${i}: Value is ${val}.`, { inputIdx: i });
+
+                    // Highlight incrementing count
+                    countArr[val]++;
+                    pushStep('count', `Incrementing count for value ${val}. (Count is now ${countArr[val]})`, { inputIdx: i, countIdx: val });
+                }
+                pushStep('info', 'Frequency counting complete.', {});
+
+                // 3. Accumulation Phase (Prefix Sum)
+                for (let i = 1; i <= MAX_VAL; i++) {
+                    pushStep('accumulate_read', `Calculating cumulative count for ${i}: ${countArr[i]} + ${countArr[i-1]} (previous).`, { countIdx: i, prevCountIdx: i-1 });
+                    
+                    countArr[i] += countArr[i - 1];
+                    
+                    pushStep('accumulate_write', `Cumulative count for ${i} is now ${countArr[i]}.`, { countIdx: i });
+                }
+                pushStep('info', 'Accumulation complete. Counts now indicate position in output.', {});
+
+                // 4. Placement Phase (Reverse for Stability)
+                for (let i = n - 1; i >= 0; i--) {
+                    const val = inputArr[i];
+                    
+                    // Highlight reading input
+                    pushStep('place_scan', `Scanning input from right (Index ${i}): Value is ${val}.`, { inputIdx: i });
+                    
+                    // Check count array for position
+                    // The count array stores the actual position (1-based usually in logic, but we treat as 0-based index endpoint)
+                    // Standard stable algorithm: position = count[val] - 1
+                    const position = countArr[val] - 1;
+                    
+                    pushStep('place_check', `Checking Count Array for ${val}. It maps to position ${position}.`, { inputIdx: i, countIdx: val });
+
+                    // Place in output
+                    outputArr[position] = val;
+                    countArr[val]--; // Decrement count
+
+                    pushStep('place_write', `Placed ${val} at Output index ${position}. Decremented count for ${val}.`, { inputIdx: i, countIdx: val, outputIdx: position });
+                }
+
+                // 5. Finished
+                pushStep('finished', 'Sorting Complete! The Output Array contains the sorted elements.');
+
+                return stepsLog;
+            };
+
+            // -- Effects --
+            useEffect(() => {
+                reset();
+                // eslint-disable-next-line react-hooks/exhaustive-deps
+            }, [arraySize]); 
+
+            const reset = () => {
+                setIsPlaying(false);
+                setIsSorted(false);
+                setCurrentStepIndex(0);
+                
+                const newArr = generateRandomArray(arraySize);
+                setInitialArray(newArr);
+                
+                const generatedSteps = generateSteps(newArr);
+                setSteps(generatedSteps);
+            };
+
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                setIsSorted(true);
+                                clearInterval(timerRef.current);
+                                return prev;
+                            }
+                        });
+                    }, 2000 - animationSpeed);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps.length, animationSpeed]);
+
+
+            // -- Controls --
+            const handleNext = () => {
+                if (currentStepIndex < steps.length - 1) {
+                    setCurrentStepIndex(prev => prev + 1);
+                    setIsPlaying(false);
+                } else {
+                    setIsSorted(true);
+                }
+            };
+
+            const handlePrev = () => {
+                if (currentStepIndex > 0) {
+                    setCurrentStepIndex(prev => prev - 1);
+                    setIsPlaying(false);
+                    setIsSorted(false);
+                }
+            };
+
+            const togglePlay = () => {
+                if (currentStepIndex === steps.length - 1) { 
+                    reset();
+                    setTimeout(() => setIsPlaying(true), 100); 
+                } else {
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+
+            // -- Render Helpers --
+            const currentStep = steps[currentStepIndex] || { 
+                inputState: initialArray, 
+                countState: new Array(MAX_VAL + 1).fill(0), 
+                outputState: new Array(initialArray.length).fill(null),
+                description: "Ready to sort", 
+                type: 'initial',
+                highlights: {} 
+            };
+
+            const { inputState, countState, outputState, description, highlights, type } = currentStep;
+
+            // Helper to determine styles based on state
+            const getInputBoxStyle = (idx) => {
+                if (type === 'finished') return 'bg-slate-700 text-slate-500 opacity-50';
+                if (highlights.inputIdx === idx) return 'bg-blue-500 text-white ring-2 ring-blue-400 scale-110 z-10';
+                // If we are in placement phase, dim the ones we've already processed (indices > current) or not processed yet?
+                // Actually, let's just highlight active.
+                return 'bg-slate-700 text-slate-200';
+            };
+
+            const getCountBoxStyle = (val) => {
+                if (highlights.countIdx === val) {
+                    if (type.includes('accumulate')) return 'bg-purple-500 text-white ring-2 ring-purple-400';
+                    if (type.includes('place')) return 'bg-emerald-500 text-white ring-2 ring-emerald-400';
+                    return 'bg-amber-500 text-white ring-2 ring-amber-400';
+                }
+                if (highlights.prevCountIdx === val) return 'bg-purple-900 text-purple-200 border-purple-500';
+                return 'bg-slate-800 text-slate-400 border-slate-600';
+            };
+
+            const getOutputBoxStyle = (idx, val) => {
+                if (val === null) return 'bg-slate-900 border-dashed border-2 border-slate-700';
+                if (highlights.outputIdx === idx) return 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)] scale-110';
+                return 'bg-emerald-600/80 text-emerald-100';
+            };
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Header & Controls */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4" },
+                    
+                    /* Title */
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement(BarChart3, { size: 28, className: "text-blue-400" }),
+                        React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-blue-400" }, "Counting Sort")
+                    ),
+
+                    /* Global Controls - Flex Grow to center */
+                    React.createElement("div", { className: "flex flex-grow items-center justify-center gap-4 flex-wrap" },
+                        /* Size Slider */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("span", { className: "text-xs text-slate-400" }, "SIZE"),
+                            React.createElement("input", {
+                                type: "range", min: "5", max: "20", step: "1",
+                                value: arraySize,
+                                onChange: (e) => setArraySize(Number(e.target.value)),
+                                disabled: isPlaying,
+                                className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
+                            }),
+                            React.createElement("span", { className: "text-sm text-slate-300" }, arraySize)
+                        ),
+
+                        /* Speed Slider */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("span", { className: "text-xs text-slate-400" }, "SPEED"),
+                            React.createElement("input", {
+                                type: "range", min: "100", max: "1900", step: "100",
+                                value: animationSpeed,
+                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                            })
+                        ),
+
+                        /* Buttons */
+                        React.createElement("div", { className: "flex items-center gap-2 ml-4" },
+                            React.createElement("button", { onClick: reset, className: "p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-all", title: "Reset" },
+                                React.createElement(RotateCcw, { size: 20 })
+                            ),
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-1 text-blue-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
+                                React.createElement(SkipBack, { size: 20 })
+                            ),
+                            React.createElement("button", { 
+                                onClick: togglePlay, 
+                                className: "p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-lg shadow-blue-900/50 transition-all hover:scale-105 active:scale-95"
+                            },
+                                isPlaying 
+                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-1" })
+                            ),
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-1 text-blue-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
+                                React.createElement(SkipForward, { size: 20 })
+                            )
+                        )
+                    ),
+
+                    /* Legend */
+                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-4 gap-y-2 text-xs text-slate-300 md:ml-auto" },
+                        React.createElement("div", { className: "flex items-center gap-1" },
+                            React.createElement("div", { className: "w-3 h-3 rounded-full bg-blue-500" }), " Scan"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-1" },
+                            React.createElement("div", { className: "w-3 h-3 rounded-full bg-amber-500" }), " Count"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-1" },
+                            React.createElement("div", { className: "w-3 h-3 rounded-full bg-purple-500" }), " Sum"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-1" },
+                            React.createElement("div", { className: "w-3 h-3 rounded-full bg-emerald-500" }), " Place"
+                        )
+                    )
+                ),
+
+                /* Main Visualization Container */
+                React.createElement("div", { className: "w-full max-w-5xl flex flex-col gap-6" },
+                    
+                    /* Description Box */
+                    React.createElement("div", { className: "min-h-[70px] bg-slate-700/50 rounded-lg border border-slate-600 p-4 flex items-center justify-center shadow-inner" },
+                        React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, description)
+                    ),
+
+                    /* 1. Input Array Section */
+                    React.createElement("div", { className: "bg-slate-800/50 rounded-xl p-4 border border-slate-700/50" },
+                        React.createElement("h3", { className: "text-sm font-semibold text-slate-400 mb-3 uppercase tracking-widest" }, "Input Array"),
+                        React.createElement("div", { className: "flex justify-center gap-2 flex-wrap" },
+                            inputState.map((val, idx) => 
+                                React.createElement("div", { key: idx, className: "flex flex-col items-center" },
+                                    React.createElement("div", { 
+                                        className: `w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-lg font-bold text-lg transition-all duration-300 ${getInputBoxStyle(idx)}`
+                                    }, val),
+                                    React.createElement("span", { className: "text-[10px] text-slate-500 mt-1" }, idx)
+                                )
+                            )
+                        )
+                    ),
+
+                    /* 2. Count Array Section */
+                    React.createElement("div", { className: "bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-lg relative overflow-hidden" },
+                        React.createElement("div", { className: "absolute top-0 right-0 p-2 opacity-10" }, React.createElement(BarChart3, { size: 64 })),
+                        React.createElement("h3", { className: "text-sm font-semibold text-amber-400 mb-3 uppercase tracking-widest" }, "Frequency / Count Array"),
+                        
+                        React.createElement("div", { className: "flex justify-center gap-1 sm:gap-2 overflow-x-auto pb-2" },
+                            countState.map((count, val) => 
+                                React.createElement("div", { key: val, className: "flex flex-col items-center min-w-[2.5rem]" },
+                                    React.createElement("span", { className: "text-[10px] text-amber-500/70 font-mono mb-1" }, `Val:${val}`),
+                                    React.createElement("div", { 
+                                        className: `w-full aspect-square flex items-center justify-center rounded border transition-all duration-300 font-bold text-lg ${getCountBoxStyle(val)}`
+                                    }, count),
+                                    /* Visual bar for magnitude */
+                                    React.createElement("div", { className: "w-1.5 bg-slate-700 rounded-full h-12 mt-2 relative overflow-hidden" },
+                                        React.createElement("div", { 
+                                            className: "absolute bottom-0 left-0 w-full bg-amber-500/50 transition-all duration-300",
+                                            style: { height: `${Math.min(count * 10, 100)}%` } 
+                                        })
+                                    )
+                                )
+                            )
+                        )
+                    ),
+
+                    /* 3. Output Array Section */
+                    React.createElement("div", { className: "bg-slate-800/50 rounded-xl p-4 border border-slate-700/50" },
+                        React.createElement("h3", { className: "text-sm font-semibold text-emerald-400 mb-3 uppercase tracking-widest" }, "Sorted Output"),
+                        React.createElement("div", { className: "flex justify-center gap-2 flex-wrap" },
+                            outputState.map((val, idx) => 
+                                React.createElement("div", { key: idx, className: "flex flex-col items-center" },
+                                    React.createElement("div", { 
+                                        className: `w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center rounded-lg font-bold text-lg transition-all duration-300 ${getOutputBoxStyle(idx, val)}`
+                                    }, val === null ? '' : val),
+                                    React.createElement("span", { className: "text-[10px] text-slate-500 mt-1" }, idx)
+                                )
+                            )
+                        )
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(CountingSortVisualizer));
+    </script>
+</body>
+</html>

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insertion Sort Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar for cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        /* Animation for description text */
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Settings, ArrowDown } from 'lucide-react';
+
+        const InsertionSortVisualizer = () => {
+            // -- State --
+            const [arraySize, setArraySize] = useState(15);
+            const [animationSpeed, setAnimationSpeed] = useState(500); 
+            const [array, setArray] = useState([]);
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [isSorted, setIsSorted] = useState(false);
+            
+            // Refs
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-600',
+                compare: 'bg-amber-500',
+                overwrite: 'bg-red-500',
+                sorted: 'bg-emerald-500',
+                key: 'bg-indigo-500', // The element being inserted
+            };
+
+            // -- Algorithm Logic --
+            const generateArray = useCallback((size) => {
+                const newArray = Array.from({ length: size }, () => Math.floor(Math.random() * 50) + 5);
+                return newArray;
+            }, []);
+
+            const generateSteps = (initialArray) => {
+                const stepsLog = [];
+                const arr = [...initialArray]; 
+                const n = arr.length;
+
+                stepsLog.push({
+                    array: [...arr],
+                    type: 'initial',
+                    highlights: [],
+                    keyIndex: null,
+                    sortedLimit: 0, // Index up to which is sorted
+                    description: "Initial array. The first element (index 0) is trivially sorted."
+                });
+
+                // Insertion Sort Logic
+                for (let i = 1; i < n; i++) {
+                    let key = arr[i];
+                    let j = i - 1;
+
+                    // Step: Select Key
+                    stepsLog.push({
+                        array: [...arr],
+                        type: 'select_key',
+                        highlights: [i], // Highlight the key
+                        keyIndex: i,
+                        sortedLimit: i - 1,
+                        description: `Selected ${key} at index ${i} as the 'Key' to insert into the sorted portion.`
+                    });
+
+                    while (j >= 0 && arr[j] > key) {
+                        // Step: Compare
+                        stepsLog.push({
+                            array: [...arr],
+                            type: 'compare',
+                            highlights: [j, j + 1], // Compare j with where key currently is (conceptually)
+                            keyIndex: j + 1, // Visually track where the "hole" for the key is
+                            sortedLimit: i, // The whole processed area
+                            description: `Compare: ${arr[j]} > ${key} (Key). Since it's larger, we must shift ${arr[j]} to the right.`
+                        });
+
+                        // Step: Shift
+                        arr[j + 1] = arr[j];
+                        stepsLog.push({
+                            array: [...arr],
+                            type: 'overwrite',
+                            highlights: [j + 1], // The position being overwritten
+                            keyIndex: j, // The "hole" moves left
+                            sortedLimit: i,
+                            description: `Shifted ${arr[j]} to position ${j + 1}.`
+                        });
+                        
+                        j = j - 1;
+                    }
+
+                    // Step: Final Comparison (if j >= 0, we failed the loop condition because arr[j] <= key)
+                    if (j >= 0) {
+                         stepsLog.push({
+                            array: [...arr],
+                            type: 'compare',
+                            highlights: [j, j + 1],
+                            keyIndex: j + 1, 
+                            sortedLimit: i,
+                            description: `Compare: ${arr[j]} <= ${key} (Key). Found the correct spot.`
+                        });
+                    } else if (j === -1) {
+                         stepsLog.push({
+                            array: [...arr],
+                            type: 'compare',
+                            highlights: [0],
+                            keyIndex: 0, 
+                            sortedLimit: i,
+                            description: `Reached start of array. Inserting Key at index 0.`
+                        });
+                    }
+
+                    // Step: Insert Key
+                    arr[j + 1] = key;
+                    stepsLog.push({
+                        array: [...arr],
+                        type: 'insert',
+                        highlights: [j + 1],
+                        keyIndex: null, // Key is placed
+                        sortedLimit: i,
+                        description: `Inserted Key (${key}) at index ${j + 1}. Sorted portion is now 0 to ${i}.`
+                    });
+                }
+                
+                stepsLog.push({
+                    array: [...arr],
+                    type: 'finished',
+                    highlights: [],
+                    keyIndex: null,
+                    sortedLimit: n - 1,
+                    description: "Sorting Complete. The array is now fully sorted."
+                });
+
+                return stepsLog;
+            };
+
+            // -- Effects --
+            useEffect(() => {
+                reset();
+            }, [arraySize]); 
+
+            const reset = () => {
+                setIsPlaying(false);
+                setIsSorted(false);
+                setCurrentStepIndex(0);
+                const newArr = generateArray(arraySize);
+                setArray(newArr);
+                const generatedSteps = generateSteps(newArr);
+                setSteps(generatedSteps);
+            };
+
+            useEffect(() => {
+                if (isPlaying) {
+                timerRef.current = setInterval(() => {
+                    setCurrentStepIndex((prev) => {
+                    if (prev < steps.length - 1) {
+                        return prev + 1;
+                    } else {
+                        setIsPlaying(false);
+                        setIsSorted(true);
+                        clearInterval(timerRef.current);
+                        return prev;
+                    }
+                    });
+                }, 2000 - animationSpeed);
+                } else {
+                clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps.length, animationSpeed]);
+
+
+            // -- Controls --
+            const handleNext = () => {
+                if (currentStepIndex < steps.length - 1) {
+                    setCurrentStepIndex(prev => prev + 1);
+                    setIsPlaying(false);
+                } else {
+                    setIsSorted(true);
+                }
+            };
+
+            const handlePrev = () => {
+                if (currentStepIndex > 0) {
+                    setCurrentStepIndex(prev => prev - 1);
+                    setIsPlaying(false);
+                    setIsSorted(false);
+                }
+            };
+
+            const togglePlay = () => {
+                if (currentStepIndex === steps.length - 1) { 
+                    reset();
+                    setTimeout(() => setIsPlaying(true), 100); 
+                } else {
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+
+            // -- Render Helpers --
+            const getCurrentStep = () => steps[currentStepIndex] || { array: array, description: "Ready to sort", type: 'initial', sortedLimit: -1 };
+
+            const getBarColor = (index) => {
+                const step = getCurrentStep();
+                
+                if (isSorted || step.type === 'finished') return COLORS.sorted;
+
+                // Specific Logic for Insertion Sort
+                if (step.keyIndex === index) return COLORS.key; // The floating key or hole
+
+                if (step.highlights && step.highlights.includes(index)) {
+                    if (step.type === 'compare') return COLORS.compare;
+                    if (step.type === 'overwrite') return COLORS.overwrite;
+                    if (step.type === 'insert') return COLORS.sorted;
+                }
+
+                // Gradient for sorted portion
+                if (step.sortedLimit !== undefined && index <= step.sortedLimit) {
+                    return COLORS.sorted; 
+                }
+                
+                return COLORS.default;
+            };
+
+             // Helper to dim bars not involved in active sorting logic to focus attention
+            const getOpacity = (index) => {
+                const step = getCurrentStep();
+                if (isSorted || step.type === 'finished') return 'opacity-100';
+                if (step.sortedLimit !== undefined && index > step.sortedLimit + 1) {
+                    // Elements far to the right that haven't been touched yet
+                    return 'opacity-60';
+                }
+                return 'opacity-100';
+            }
+
+            const currentData = steps[currentStepIndex]?.array || array;
+            const currentDesc = steps[currentStepIndex]?.description || "Press Play to start sorting.";
+            const currentKeyIndex = steps[currentStepIndex]?.keyIndex;
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Top Bar */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4" },
+                    
+                    /* Title - Removed fixed width */
+                    React.createElement("div", { className: "flex items-center gap-3 min-w-fit" },
+                    React.createElement(Settings, { size: 28, className: "text-indigo-400" }),
+                    React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-indigo-400 whitespace-nowrap" }, "Insertion Sort")
+                    ),
+
+                    /* Global Controls */
+                    React.createElement("div", { className: "flex flex-grow items-center justify-center gap-4 flex-wrap" },
+                    React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement("span", { className: "text-xs text-slate-400" }, "SIZE"),
+                        React.createElement("input", {
+                        type: "range", min: "5", max: "25", step: "1",
+                        value: arraySize,
+                        onChange: (e) => setArraySize(Number(e.target.value)),
+                        disabled: isPlaying,
+                        className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-sm text-slate-300 min-w-[1.5rem] text-center" }, arraySize)
+                    ),
+
+                    React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement("span", { className: "text-xs text-slate-400" }, "SPEED"),
+                        React.createElement("input", {
+                        type: "range", min: "100", max: "1900", step: "100",
+                        value: animationSpeed,
+                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                        className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                        })
+                    ),
+
+                    React.createElement("div", { className: "flex items-center gap-2 ml-2" },
+                        React.createElement("button", { onClick: reset, className: "p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-all", title: "Reset" },
+                        React.createElement(RotateCcw, { size: 20 })
+                        ),
+                        React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-1 text-indigo-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
+                        React.createElement(SkipBack, { size: 20 })
+                        ),
+                        React.createElement("button", { 
+                        onClick: togglePlay, 
+                        className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95"
+                        },
+                        isPlaying 
+                            ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                            : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-1" })
+                        ),
+                        React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-1 text-indigo-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
+                        React.createElement(SkipForward, { size: 20 })
+                        )
+                    )
+                    ),
+
+                    /* Legend - Removed fixed width, allowed natural flow */
+                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-4 gap-y-2 text-xs text-slate-300 min-w-fit md:ml-auto" },
+                    React.createElement("div", { className: "flex items-center gap-1" },
+                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.key}` }), " Key"
+                    ),
+                    React.createElement("div", { className: "flex items-center gap-1" },
+                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.compare}` }), " Compare"
+                    ),
+                    React.createElement("div", { className: "flex items-center gap-1" },
+                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.overwrite}` }), " Shift"
+                    ),
+                    React.createElement("div", { className: "flex items-center gap-1" },
+                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.sorted}` }), " Sorted"
+                    )
+                    )
+                ),
+
+                /* Main Content */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
+                    
+                    /* Description Box */
+                    React.createElement("div", { className: "min-h-[70px] bg-slate-700/50 rounded-lg border border-slate-600 p-4 flex items-center justify-center shadow-inner" },
+                    React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                    ),
+
+                    /* Array Representation */
+                    React.createElement("div", { className: "flex flex-col items-center w-full" },
+                    React.createElement("h3", { className: "text-sm font-semibold text-slate-400 mb-2" }, "ARRAY VALUES"),
+                    React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 px-4" },
+                        currentData.map((val, idx) => 
+                        React.createElement("div", { 
+                            key: idx, 
+                            className: `relative w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 border border-slate-600
+                            ${idx === currentKeyIndex ? 'border-indigo-400 border-2 -translate-y-2 shadow-indigo-500/50 shadow-md bg-indigo-900 text-indigo-100' : 'bg-slate-800 text-slate-300'}
+                            ${getOpacity(idx)}`
+                        },
+                            React.createElement("span", null, val),
+                            React.createElement("span", { className: "text-[9px] font-normal text-slate-500 leading-none mt-1" }, idx),
+                            
+                            /* Render little arrow if this is the key */
+                            idx === currentKeyIndex && React.createElement("div", { className: "absolute -bottom-5 text-indigo-400 animate-bounce" }, 
+                                React.createElement(ArrowDown, { size: 14 })
+                            )
+                        )
+                        )
+                    )
+                    ),
+
+                    /* Bar Chart */
+                    React.createElement("div", { className: "relative w-full h-64 sm:h-80 bg-slate-900 rounded-lg p-4 flex items-end justify-center overflow-hidden" },
+                    React.createElement("div", { className: "absolute inset-0 opacity-10 pointer-events-none", style: { backgroundImage: 'radial-gradient(#64748b 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                    React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
+                        currentData.map((val, idx) => {
+                        const heightPct = (val / 60) * 100;
+                        return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group ${getOpacity(idx)}` },
+                            React.createElement("span", { className: "text-[10px] text-slate-200 mb-1 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
+                            React.createElement("div", { 
+                            className: `w-full rounded-t-md transition-all duration-200 ease-in-out ${getBarColor(idx)}`,
+                            style: { height: `${heightPct}%` }
+                            })
+                        );
+                        })
+                    )
+                    ),
+
+                    /* Footer */
+                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                    React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                    React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full" },
+                        React.createElement("div", { 
+                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                        style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
+                        })
+                    ),
+                    React.createElement("span", null, isSorted ? "Sorted" : "Sorting...")
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(InsertionSortVisualizer));
+    </script>
+</body>
+</html>
