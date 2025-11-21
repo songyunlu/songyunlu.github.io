@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adjacency Matrix Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        body { background-color: #0f172a; } /* Slate 900 */
+
+        /* SVG Styles */
+        .node-transition { transition: fill 0.2s ease, stroke 0.2s ease, r 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .line-transition { transition: stroke 0.2s ease, stroke-width 0.2s ease, opacity 0.2s ease; }
+        
+        /* Matrix Styles */
+        .cell-transition { transition: background-color 0.2s ease, transform 0.1s ease; }
+        
+        /* Cursors */
+        .grab-cursor { cursor: grab; }
+        .grab-cursor:active { cursor: grabbing; }
+        .node-interactive { cursor: grab; }
+        .node-interactive:active { cursor: grabbing; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Grid, ZoomIn, ZoomOut, Maximize, Info, ArrowRight, MoveHorizontal, Hash, Circle } from 'lucide-react';
+
+        const AdjacencyMatrixVisualizer = () => {
+            // -- State --
+            const [nodeCount, setNodeCount] = useState(6);
+            const [edgeDensity, setEdgeDensity] = useState(1.0);
+            const [animationSpeed, setAnimationSpeed] = useState(1000); 
+            
+            // Graph Configuration State
+            const [isWeighted, setIsWeighted] = useState(true);
+            const [isDirected, setIsDirected] = useState(false);
+
+            const [graph, setGraph] = useState({ nodes: [], edges: [] });
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [isFinished, setIsFinished] = useState(false);
+            
+            // Interaction State
+            const [hoveredCell, setHoveredCell] = useState(null); // { r, c }
+            const [hoveredNode, setHoveredNode] = useState(null); // nodeId
+
+            // Zoom & Pan State
+            const [zoom, setZoom] = useState(1);
+            const [pan, setPan] = useState({ x: 0, y: 0 });
+            const [isPanning, setIsPanning] = useState(false);
+            const [draggingNode, setDraggingNode] = useState(null);
+            const lastMousePos = useRef({ x: 0, y: 0 });
+
+            const timerRef = useRef(null);
+            const CANVAS_WIDTH = 600; // Slightly smaller to fit split view
+            const CANVAS_HEIGHT = 500; 
+
+            // -- Colors --
+            const COLORS = {
+                defaultNode: '#475569', // Slate 600
+                activeNode: '#f59e0b', // Amber 500 (Row/Col Check)
+                targetNode: '#6366f1', // Indigo 500 (Target Check)
+                highlightNode: '#3b82f6', // Blue 500 (Hover)
+                
+                edgeDefault: '#334155', // Slate 700
+                edgeActive: '#fbbf24', // Amber 400 (Found)
+                edgeCheck: '#6366f1', // Indigo 500 (Checking)
+                
+                cellDefault: '#1e293b', // Slate 800
+                cellEmpty: '#0f172a',   // Slate 900 (Checked, 0)
+                cellFilled: '#0ea5e9',  // Sky 500 (Checked, 1/Weight)
+                cellActive: '#f59e0b',  // Amber 500 (Current Scanner)
+                
+                text: '#e2e8f0'
+            };
+
+            // -- Physics Layout Logic (Reused from template) --
+            const runForceLayout = (nodes, edges, width, height) => {
+                const iterations = 300; 
+                const repulsion = 8000; 
+                const springLength = 150; 
+                const k = 0.05; 
+                const damping = 0.85;
+                const centerForce = 0.02; 
+
+                let velocities = nodes.map(() => ({ x: 0, y: 0 }));
+
+                for (let i = 0; i < iterations; i++) {
+                    // Center Gravity
+                    nodes.forEach((node, idx) => {
+                        const dx = (width / 2) - node.x;
+                        const dy = (height / 2) - node.y;
+                        velocities[idx].x += dx * centerForce;
+                        velocities[idx].y += dy * centerForce;
+                    });
+
+                    // Repulsion
+                    for (let a = 0; a < nodes.length; a++) {
+                        for (let b = 0; b < nodes.length; b++) {
+                            if (a === b) continue;
+                            const dx = nodes[a].x - nodes[b].x;
+                            const dy = nodes[a].y - nodes[b].y;
+                            let distSq = dx * dx + dy * dy || 1;
+                            const force = repulsion / distSq; 
+                            const fx = (dx / Math.sqrt(distSq)) * force;
+                            const fy = (dy / Math.sqrt(distSq)) * force;
+                            velocities[a].x += fx;
+                            velocities[a].y += fy;
+                        }
+                    }
+
+                    // Attraction
+                    edges.forEach(edge => {
+                        const sIdx = nodes.findIndex(n => n.id === edge.source);
+                        const tIdx = nodes.findIndex(n => n.id === edge.target);
+                        if (sIdx === -1 || tIdx === -1) return;
+
+                        const dx = nodes[tIdx].x - nodes[sIdx].x;
+                        const dy = nodes[tIdx].y - nodes[sIdx].y;
+                        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+                        const force = (dist - springLength) * k;
+                        const fx = (dx / dist) * force;
+                        const fy = (dy / dist) * force;
+
+                        velocities[sIdx].x += fx;
+                        velocities[sIdx].y += fy;
+                        velocities[tIdx].x -= fx;
+                        velocities[tIdx].y -= fy;
+                    });
+
+                    // Update
+                    nodes.forEach((node, idx) => {
+                        node.x += velocities[idx].x;
+                        node.y += velocities[idx].y;
+                        velocities[idx].x *= damping;
+                        velocities[idx].y *= damping;
+                        
+                        // Bounds
+                        const padding = 40;
+                        node.x = Math.max(padding, Math.min(width - padding, node.x));
+                        node.y = Math.max(padding, Math.min(height - padding, node.y));
+                    });
+                }
+            };
+
+            // -- Graph & Step Generation --
+            const generateGraph = useCallback((count, density, weighted, directed) => {
+                const nodes = [];
+                const edges = [];
+
+                // Create Nodes
+                for (let i = 0; i < count; i++) {
+                    nodes.push({ 
+                        id: i, 
+                        x: CANVAS_WIDTH / 2 + (Math.random() - 0.5) * 100, 
+                        y: CANVAS_HEIGHT / 2 + (Math.random() - 0.5) * 100, 
+                        label: String.fromCharCode(65 + i) 
+                    });
+                }
+
+                // Edge Generation
+                const maxPossibleEdges = directed ? (count * (count - 1)) : (count * (count - 1)) / 2;
+                // For directed, we can have A->B and B->A. For undirected, just A-B.
+                
+                const targetEdges = Math.max(count - 1, Math.floor(maxPossibleEdges * density)); 
+
+                // Helper to create random edge
+                const addRandomEdge = () => {
+                    const s = Math.floor(Math.random() * count);
+                    const t = Math.floor(Math.random() * count);
+                    if (s === t) return false;
+
+                    // Check existence
+                    let exists = false;
+                    if (directed) {
+                        exists = edges.some(e => e.source === s && e.target === t);
+                    } else {
+                        exists = edges.some(e => (e.source === s && e.target === t) || (e.source === t && e.target === s));
+                    }
+
+                    if (!exists) {
+                        const w = weighted ? Math.floor(Math.random() * 9) + 1 : 1;
+                        edges.push({ source: s, target: t, weight: w });
+                        return true;
+                    }
+                    return false;
+                };
+
+                // Ensure connectivity (spanning tree-ish)
+                for(let i=0; i<count-1; i++){
+                     const w = weighted ? Math.floor(Math.random() * 9) + 1 : 1;
+                     // For visualization simplicity, just link linearly first so it's not disjoint
+                     // (In directed, this might only go one way, which is fine)
+                     edges.push({ source: i, target: i+1, weight: w });
+                }
+
+                let attempts = 0;
+                while(edges.length < targetEdges && attempts < 1000) {
+                    addRandomEdge();
+                    attempts++;
+                }
+
+                runForceLayout(nodes, edges, CANVAS_WIDTH, CANVAS_HEIGHT);
+                return { nodes, edges };
+            }, []);
+
+            // Generate the animation steps for "Building the Matrix"
+            const generateMatrixSteps = (graphData, directed) => {
+                const stepsLog = [];
+                const { nodes, edges } = graphData;
+                const n = nodes.length;
+                
+                // Helper to find edge
+                const getEdge = (u, v) => {
+                    if (directed) {
+                        return edges.find(e => e.source === u && e.target === v);
+                    } else {
+                        return edges.find(e => (e.source === u && e.target === v) || (e.source === v && e.target === u));
+                    }
+                };
+
+                // Initial state
+                stepsLog.push({
+                    r: -1, c: -1,
+                    filledCells: {}, 
+                    description: `Initializing Matrix. ${directed ? 'Checking Directed Edges (Source -> Target).' : 'Checking Undirected Connections.'}`
+                });
+
+                for (let r = 0; r < n; r++) {
+                    for (let c = 0; c < n; c++) {
+                        const edge = getEdge(nodes[r].id, nodes[c].id);
+                        const val = (r === c) ? 0 : (edge ? edge.weight : 0);
+                        
+                        // Step 1: Check
+                        stepsLog.push({
+                            r: r, c: c,
+                            filledCells: { ...stepsLog[stepsLog.length-1].filledCells }, // copy previous
+                            type: 'check',
+                            description: `Checking connection: ${nodes[r].label} ${directed ? '→' : '—'} ${nodes[c].label}`
+                        });
+
+                        // Step 2: Fill
+                        const newFilled = { ...stepsLog[stepsLog.length-1].filledCells };
+                        newFilled[`${r}-${c}`] = val;
+                        
+                        let desc = "";
+                        if (val > 0) {
+                            desc = `Edge found! Weight ${val}. Marking cell (${nodes[r].label}, ${nodes[c].label}).`;
+                        } else {
+                             if (r === c) desc = "Diagonal (Self-loop). Marking as 0.";
+                             else desc = `No edge from ${nodes[r].label} to ${nodes[c].label}. Marking as 0.`;
+                        }
+
+                        stepsLog.push({
+                            r: r, c: c,
+                            filledCells: newFilled,
+                            type: 'fill',
+                            val: val,
+                            description: desc
+                        });
+                    }
+                }
+
+                // Final Step
+                stepsLog.push({
+                    r: -2, c: -2,
+                    filledCells: stepsLog[stepsLog.length-1].filledCells,
+                    type: 'finished',
+                    description: `Matrix complete. ${!directed ? 'Symmetric due to undirected graph.' : 'Not symmetric due to directed graph.'}`
+                });
+
+                return stepsLog;
+            };
+
+            // -- Effects --
+            useEffect(() => {
+                reset();
+            }, [nodeCount, edgeDensity, isWeighted, isDirected]);
+
+            const reset = () => {
+                setIsPlaying(false);
+                setIsFinished(false);
+                setCurrentStepIndex(0);
+                const newGraph = generateGraph(nodeCount, edgeDensity, isWeighted, isDirected);
+                setGraph(newGraph);
+                const newSteps = generateMatrixSteps(newGraph, isDirected);
+                setSteps(newSteps);
+            };
+
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                setIsFinished(true);
+                                clearInterval(timerRef.current);
+                                return prev;
+                            }
+                        });
+                    }, 2000 - animationSpeed); // Speed mapping
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps.length, animationSpeed]);
+
+            // -- Handlers --
+            const handleNext = () => {
+                if (currentStepIndex < steps.length - 1) {
+                    setCurrentStepIndex(prev => prev + 1);
+                    setIsPlaying(false);
+                } else {
+                    setIsFinished(true);
+                }
+            };
+
+            const handlePrev = () => {
+                if (currentStepIndex > 0) {
+                    setCurrentStepIndex(prev => prev - 1);
+                    setIsPlaying(false);
+                    setIsFinished(false);
+                }
+            };
+
+            const togglePlay = () => {
+                if (currentStepIndex === steps.length - 1) { 
+                    setCurrentStepIndex(0);
+                    setIsFinished(false);
+                    setTimeout(() => setIsPlaying(true), 100); 
+                } else {
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+            // -- View Handlers --
+            const handleZoomIn = (e) => { e.stopPropagation(); setZoom(z => Math.min(z * 1.2, 4)); };
+            const handleZoomOut = (e) => { e.stopPropagation(); setZoom(z => Math.max(z / 1.2, 0.5)); };
+            const handleFitView = (e) => { e.stopPropagation(); setZoom(1); setPan({ x: 0, y: 0 }); };
+            
+            const handleCanvasMouseDown = (e) => {
+                setIsPanning(true);
+                lastMousePos.current = { x: e.clientX, y: e.clientY };
+            };
+            const handleNodeMouseDown = (e, nodeId) => {
+                e.stopPropagation();
+                setDraggingNode(nodeId);
+                lastMousePos.current = { x: e.clientX, y: e.clientY };
+            };
+            const handleMouseMove = (e) => {
+                const dx = e.clientX - lastMousePos.current.x;
+                const dy = e.clientY - lastMousePos.current.y;
+                lastMousePos.current = { x: e.clientX, y: e.clientY };
+
+                if (draggingNode !== null) {
+                    setGraph(prev => ({
+                        ...prev,
+                        nodes: prev.nodes.map(n => n.id === draggingNode ? { ...n, x: n.x + dx/zoom, y: n.y + dy/zoom } : n)
+                    }));
+                } else if (isPanning) {
+                    setPan(p => ({ x: p.x + dx, y: p.y + dy }));
+                }
+            };
+            const handleMouseUp = () => { setIsPanning(false); setDraggingNode(null); };
+
+            // -- Render Logic Helpers --
+            const currentStep = steps[currentStepIndex] || { filledCells: {}, r: -1, c: -1 };
+            
+            // Compute highlights based on Step OR Hover
+            const activeRow = hoveredCell ? hoveredCell.r : (hoveredNode !== null ? hoveredNode : currentStep.r);
+            const activeCol = hoveredCell ? hoveredCell.c : (hoveredNode !== null ? hoveredNode : currentStep.c);
+
+            // Graph Rendering Helpers
+            const getNodeColor = (nodeId) => {
+                if (nodeId === activeRow && nodeId === activeCol) return COLORS.activeNode; // Intersection
+                if (nodeId === activeRow) return COLORS.activeNode;
+                if (nodeId === activeCol) return COLORS.targetNode;
+                return COLORS.defaultNode;
+            };
+
+            const getEdgeColor = (u, v) => {
+                // Determine if this edge is being highlighted
+                let isHighlighted = false;
+                
+                // Hover highlight
+                if (hoveredCell) {
+                    if (isDirected) {
+                        if (hoveredCell.r === u && hoveredCell.c === v) isHighlighted = true;
+                    } else {
+                        if ((hoveredCell.r === u && hoveredCell.c === v) || (hoveredCell.r === v && hoveredCell.c === u)) isHighlighted = true;
+                    }
+                }
+                
+                // Animation highlight
+                if (!isHighlighted && currentStep.r !== -1) {
+                    if (isDirected) {
+                         if (currentStep.r === u && currentStep.c === v) {
+                            const val = currentStep.filledCells[`${currentStep.r}-${currentStep.c}`];
+                            if (val > 0 || currentStep.type === 'check') isHighlighted = true;
+                         }
+                    } else {
+                        const isCurrentPair = (currentStep.r === u && currentStep.c === v) || (currentStep.r === v && currentStep.c === u);
+                        if (isCurrentPair) {
+                            const val = currentStep.filledCells[`${currentStep.r}-${currentStep.c}`];
+                            if (val > 0 || currentStep.type === 'check') isHighlighted = true;
+                        }
+                    }
+                }
+                
+                return isHighlighted ? COLORS.edgeActive : COLORS.edgeDefault;
+            };
+
+            const getEdgeWidth = (u, v) => {
+                // Same logic as color for width boost
+                let isHighlighted = false;
+                if (hoveredCell) {
+                    if (isDirected) {
+                        if (hoveredCell.r === u && hoveredCell.c === v) isHighlighted = true;
+                    } else {
+                         if ((hoveredCell.r === u && hoveredCell.c === v) || (hoveredCell.r === v && hoveredCell.c === u)) isHighlighted = true;
+                    }
+                }
+                
+                if (!isHighlighted && currentStep.r !== -1) {
+                    if (isDirected) {
+                        if (currentStep.r === u && currentStep.c === v) isHighlighted = true;
+                    } else {
+                        if ((currentStep.r === u && currentStep.c === v) || (currentStep.r === v && currentStep.c === u)) isHighlighted = true;
+                    }
+                }
+                return isHighlighted ? 4 : 2;
+            };
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
+                
+                /* Header */
+                React.createElement("div", { className: "w-full max-w-6xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
+                    /* Title */
+                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                        React.createElement(Grid, { size: 38, className: "text-blue-400" }),
+                        React.createElement("div", { className: "flex flex-col" },
+                            React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-blue-400 whitespace-nowrap" }, "Adjacency Matrix"),
+                            React.createElement("span", { className: "text-sm text-slate-400 font-medium" }, "Graph ⇔ Matrix Representation")
+                        )
+                    ),
+
+                    /* Controls Pill */
+                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
+                        
+                        /* Sliders */
+                        React.createElement("div", { className: "flex items-center gap-4 flex-wrap justify-center" },
+                            /* Size */
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Nodes"),
+                                React.createElement("input", {
+                                    type: "range", min: "3", max: "10", step: "1",
+                                    value: nodeCount,
+                                    onChange: (e) => setNodeCount(Number(e.target.value)),
+                                    disabled: isPlaying,
+                                    className: "w-16 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                }),
+                            ),
+
+                            /* Density Slider */
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Density"),
+                                React.createElement("input", {
+                                    type: "range", min: "0.5", max: "3.0", step: "0.1",
+                                    value: edgeDensity,
+                                    onChange: (e) => setEdgeDensity(Number(e.target.value)),
+                                    disabled: isPlaying,
+                                    className: "w-16 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                                }),
+                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-6" }, edgeDensity.toFixed(1))
+                            ),
+
+                            /* Speed */
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
+                                React.createElement("input", {
+                                    type: "range", min: "100", max: "1900", step: "100",
+                                    value: animationSpeed,
+                                    onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                    className: "w-16 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                })
+                            )
+                        ),
+
+                        React.createElement("div", { className: "h-6 w-px bg-slate-700 hidden sm:block" }),
+
+                        /* Playback Controls */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("button", { onClick: reset, className: "text-slate-400 hover:text-white", title: "Reset" }, React.createElement(RotateCcw, { size: 18 })),
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "text-slate-400 hover:text-white disabled:opacity-30" }, React.createElement(SkipBack, { size: 18 })),
+                            React.createElement("button", { 
+                                onClick: togglePlay, 
+                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all"
+                            }, isPlaying ? React.createElement(Pause, { size: 20, fill: "currentColor" }) : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })),
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "text-slate-400 hover:text-white disabled:opacity-30" }, React.createElement(SkipForward, { size: 18 }))
+                        )
+                    )
+                ),
+
+                /* Instruction Banner */
+                React.createElement("div", { className: "w-full max-w-6xl min-h-[50px] bg-slate-800 rounded-xl border border-slate-700 p-3 mb-4 flex items-center justify-center text-center shadow-sm" },
+                    React.createElement("p", { className: "text-base sm:text-lg text-blue-100 font-medium animate-fade-in flex items-center gap-2" }, 
+                        React.createElement(Info, { size: 20, className: "text-blue-400" }),
+                        currentStep.description || "Hover over the matrix cells or nodes to visualize connections."
+                    )
+                ),
+
+                /* Main Split View */
+                React.createElement("div", { className: "w-full max-w-6xl flex flex-col lg:flex-row gap-4" },
+                    
+                    /* LEFT: GRAPH VIEW */
+                    React.createElement("div", { className: "flex-1 bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col shadow-lg h-[500px] relative" },
+                        React.createElement("div", { className: "flex justify-between items-center mb-2" },
+                            React.createElement("h2", { className: "text-slate-400 font-bold text-sm tracking-wider uppercase" }, "Graph Visualization"),
+                            React.createElement("div", { className: "flex gap-2" },
+                                React.createElement("div", { className: "flex items-center gap-1 text-xs text-slate-500" }, React.createElement("div", { className: "w-2 h-2 rounded-full bg-amber-500"}), "Source"),
+                                React.createElement("div", { className: "flex items-center gap-1 text-xs text-slate-500" }, React.createElement("div", { className: "w-2 h-2 rounded-full bg-indigo-500"}), "Target")
+                            )
+                        ),
+                        
+                        /* Graph Canvas */
+                        React.createElement("div", { 
+                            className: `flex-1 relative bg-slate-900 rounded-lg border border-slate-700 overflow-hidden ${isPanning ? 'cursor-grabbing' : 'grab-cursor'}`,
+                            onMouseDown: handleCanvasMouseDown, onMouseMove: handleMouseMove, onMouseUp: handleMouseUp, onMouseLeave: handleMouseUp
+                        },
+                             /* Grid Pattern */
+                            React.createElement("div", { 
+                                className: "absolute inset-0 pointer-events-none opacity-20", 
+                                style: { backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)', backgroundSize: '20px 20px', transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center' } 
+                            }),
+
+                            React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full select-none" },
+                                /* Define Arrowhead Marker */
+                                React.createElement("defs", null,
+                                    React.createElement("marker", {
+                                        id: "arrowhead",
+                                        markerWidth: "6", markerHeight: "4",
+                                        refX: "24", refY: "2", // refX pushes arrow back from center of node (r=24)
+                                        orient: "auto"
+                                    },
+                                        React.createElement("polygon", { points: "0 0, 6 2, 0 4", fill: "#475569" })
+                                    ),
+                                     React.createElement("marker", {
+                                        id: "arrowhead-active",
+                                        markerWidth: "6", markerHeight: "4",
+                                        refX: "24", refY: "2", 
+                                        orient: "auto"
+                                    },
+                                        React.createElement("polygon", { points: "0 0, 6 2, 0 4", fill: "#fbbf24" })
+                                    )
+                                ),
+                                
+                                React.createElement("g", { style: { transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center', transition: (isPanning || draggingNode !== null) ? 'none' : 'transform 0.1s ease-out' } },
+                                    /* Edges */
+                                    graph.edges.map((edge, idx) => {
+                                        const s = graph.nodes.find(n => n.id === edge.source);
+                                        const t = graph.nodes.find(n => n.id === edge.target);
+                                        if (!s || !t) return null;
+                                        
+                                        // Adjust endpoints for directed graph to stop at circle edge
+                                        // Simple line is okay because marker handles the endpoint, but we need to calculate midpoint for text
+                                        
+                                        const color = getEdgeColor(edge.source, edge.target);
+                                        const width = getEdgeWidth(edge.source, edge.target);
+                                        const isHighlighted = color === COLORS.edgeActive;
+
+                                        return React.createElement("g", { key: `edge-${idx}`, className: "pointer-events-none" },
+                                            React.createElement("line", {
+                                                x1: s.x, y1: s.y, x2: t.x, y2: t.y,
+                                                stroke: color, 
+                                                strokeWidth: width,
+                                                className: "line-transition",
+                                                markerEnd: isDirected ? (isHighlighted ? "url(#arrowhead-active)" : "url(#arrowhead)") : undefined
+                                            }),
+                                            /* Weight Label (only if weighted) */
+                                            isWeighted && React.createElement("circle", { cx: (s.x+t.x)/2, cy: (s.y+t.y)/2, r: 10, fill: "#1e293b", stroke: color, strokeWidth: 1 }),
+                                            isWeighted && React.createElement("text", { x: (s.x+t.x)/2, y: (s.y+t.y)/2, dy: 4, textAnchor: "middle", fill: "#94a3b8", fontSize: 10, fontWeight: "bold" }, edge.weight)
+                                        );
+                                    }),
+                                    /* Nodes */
+                                    graph.nodes.map((node) => {
+                                        const isDragging = draggingNode === node.id;
+                                        return React.createElement("g", { 
+                                            key: `node-${node.id}`, 
+                                            className: `node-transition node-interactive ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`,
+                                            onMouseDown: (e) => handleNodeMouseDown(e, node.id),
+                                            onMouseEnter: () => setHoveredNode(node.id),
+                                            onMouseLeave: () => setHoveredNode(null)
+                                        },
+                                            React.createElement("circle", {
+                                                cx: node.x, cy: node.y, r: 24,
+                                                fill: getNodeColor(node.id),
+                                                stroke: isDragging ? '#cbd5e1' : "#0f172a", strokeWidth: 3,
+                                                className: "node-transition"
+                                            }),
+                                            React.createElement("text", { x: node.x, y: node.y, dy: 5, textAnchor: "middle", fill: "#fff", fontWeight: "bold", fontSize: 14, className: "pointer-events-none" }, node.label)
+                                        );
+                                    })
+                                )
+                            ),
+                            
+                            /* Top Left Controls (Weights / Direction) */
+                            React.createElement("div", { className: "absolute top-4 left-4 flex flex-col gap-2 bg-slate-800/90 p-1.5 rounded-lg shadow-xl border border-slate-700" },
+                                /* Weight Toggle */
+                                React.createElement("button", { 
+                                    onClick: () => !isPlaying && setIsWeighted(!isWeighted),
+                                    disabled: isPlaying,
+                                    className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold border w-20 justify-center ${isWeighted ? 'bg-sky-900/50 border-sky-500 text-sky-300' : 'bg-slate-700 border-slate-600 text-slate-400'} transition-all hover:bg-opacity-80`
+                                }, React.createElement(Hash, { size: 14 }), "Weight"),
+
+                                /* Direct Toggle */
+                                React.createElement("button", { 
+                                    onClick: () => !isPlaying && setIsDirected(!isDirected),
+                                    disabled: isPlaying,
+                                    className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold border w-20 justify-center ${isDirected ? 'bg-purple-900/50 border-purple-500 text-purple-300' : 'bg-slate-700 border-slate-600 text-slate-400'} transition-all hover:bg-opacity-80`
+                                }, 
+                                    isDirected ? React.createElement(ArrowRight, { size: 14 }) : React.createElement(MoveHorizontal, { size: 14 }), 
+                                    isDirected ? "Direct" : "Undir"
+                                )
+                            ),
+
+                            /* Zoom Controls */
+                            React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-1.5 rounded-lg shadow-xl border border-slate-700" },
+                                React.createElement("button", { onClick: handleZoomIn, className: "p-1.5 hover:bg-slate-700 text-slate-300 rounded" }, React.createElement(ZoomIn, { size: 18 })),
+                                React.createElement("button", { onClick: handleZoomOut, className: "p-1.5 hover:bg-slate-700 text-slate-300 rounded" }, React.createElement(ZoomOut, { size: 18 })),
+                                React.createElement("div", { className: "h-px bg-slate-700 w-full my-0.5" }),
+                                React.createElement("button", { onClick: handleFitView, className: "p-1.5 hover:bg-slate-700 text-blue-400 rounded" }, React.createElement(Maximize, { size: 18 }))
+                            )
+                        )
+                    ),
+
+                    /* RIGHT: MATRIX VIEW */
+                    React.createElement("div", { className: "w-full lg:w-[420px] bg-slate-800 rounded-xl border border-slate-700 p-6 flex flex-col shadow-lg h-auto lg:h-[500px]" },
+                         React.createElement("div", { className: "flex justify-between items-center mb-4" },
+                            React.createElement("h2", { className: "text-slate-400 font-bold text-sm tracking-wider uppercase" }, "Adjacency Matrix"),
+                            React.createElement("div", { className: "text-xs text-slate-500 font-mono bg-slate-900 px-2 py-1 rounded border border-slate-700" }, "M[i][j] = Weight")
+                        ),
+
+                        /* Matrix Container - Centered */
+                        React.createElement("div", { className: "flex-1 flex items-center justify-center overflow-auto" },
+                            React.createElement("div", { 
+                                className: "grid gap-1 p-2 bg-slate-900 rounded-lg border border-slate-700",
+                                style: { gridTemplateColumns: `auto repeat(${graph.nodes.length}, minmax(28px, 1fr))` }
+                            },
+                                /* Top Header Row (Col Labels) */
+                                React.createElement("div", { className: "h-8 w-8" }), // Empty top-left corner
+                                graph.nodes.map((n, i) => 
+                                    React.createElement("div", { 
+                                        key: `h-${i}`, 
+                                        className: `h-8 flex items-center justify-center text-xs font-bold rounded transition-colors duration-200 ${activeCol === n.id ? 'bg-indigo-500 text-white' : 'text-slate-400'}` 
+                                    }, n.label)
+                                ),
+
+                                /* Matrix Rows */
+                                graph.nodes.map((rowNode, r) => [
+                                    /* Row Header (Row Label) */
+                                    React.createElement("div", { 
+                                        key: `v-${r}`, 
+                                        className: `w-8 flex items-center justify-center text-xs font-bold rounded transition-colors duration-200 ${activeRow === rowNode.id ? 'bg-amber-500 text-white' : 'text-slate-400'}` 
+                                    }, rowNode.label),
+                                    
+                                    /* Cells */
+                                    graph.nodes.map((colNode, c) => {
+                                        const cellKey = `${r}-${c}`;
+                                        const isChecking = currentStep.r === r && currentStep.c === c;
+                                        const filledVal = currentStep.filledCells ? currentStep.filledCells[cellKey] : undefined;
+                                        const hasVal = filledVal !== undefined;
+                                        
+                                        // Visual State of Cell
+                                        let bgColor = COLORS.cellDefault;
+                                        let textColor = 'text-slate-600';
+                                        let border = 'border-slate-800';
+                                        let scale = 'scale-100';
+                                        
+                                        if (isChecking) {
+                                            bgColor = COLORS.cellActive;
+                                            textColor = 'text-white';
+                                            scale = 'scale-110 z-10 shadow-lg';
+                                            border = 'border-white';
+                                        } else if (hasVal) {
+                                            if (filledVal > 0) {
+                                                bgColor = COLORS.cellFilled; // Filled with edge
+                                                textColor = 'text-white';
+                                            } else {
+                                                bgColor = COLORS.cellEmpty; // Checked, no edge
+                                                textColor = 'text-slate-500';
+                                            }
+                                            
+                                            // Hover logic
+                                            if (hoveredCell && (hoveredCell.r === r || hoveredCell.c === c)) {
+                                                if (hoveredCell.r === r && hoveredCell.c === c) {
+                                                    border = 'border-white'; // Exact cell match
+                                                } else {
+                                                    bgColor = filledVal > 0 ? '#0284c7' : '#1e293b'; // Dim highlight row/col
+                                                }
+                                            }
+                                        }
+
+                                        return React.createElement("div", {
+                                            key: cellKey,
+                                            onMouseEnter: () => setHoveredCell({ r: rowNode.id, c: colNode.id }),
+                                            onMouseLeave: () => setHoveredCell(null),
+                                            className: `w-7 h-7 sm:w-9 sm:h-9 flex items-center justify-center text-sm font-mono rounded border cursor-pointer cell-transition ${bgColor} ${textColor} ${border} ${scale}`,
+                                        }, hasVal ? filledVal : (isChecking ? '?' : ''))
+                                    })
+                                ])
+                            )
+                        )
+                    )
+                ),
+
+                /* Footer Status */
+                React.createElement("div", { className: "w-full max-w-6xl mt-6 flex items-center justify-between text-xs text-slate-500 border-t border-slate-700 pt-4" },
+                     React.createElement("div", { className: "flex gap-4" },
+                        React.createElement("div", { className: "flex items-center gap-2" }, React.createElement("div", { className: "w-3 h-3 bg-amber-500 rounded"}), "Processing"),
+                        React.createElement("div", { className: "flex items-center gap-2" }, React.createElement("div", { className: "w-3 h-3 bg-sky-500 rounded"}), "Connection (>0)"),
+                        React.createElement("div", { className: "flex items-center gap-2" }, React.createElement("div", { className: "w-3 h-3 bg-slate-900 border border-slate-700 rounded"}), "No Connection (0)")
+                     ),
+                     React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement("span", { className: "font-mono" }, `STEP ${currentStepIndex} / ${steps.length-1}`),
+                        React.createElement("div", { className: "w-32 h-1 bg-slate-700 rounded-full overflow-hidden" },
+                            React.createElement("div", { 
+                                className: "h-full bg-blue-500 transition-all duration-300",
+                                style: { width: `${(currentStepIndex / (steps.length-1)) * 100}%` }
+                            })
+                        )
+                     )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(AdjacencyMatrixVisualizer));
+    </script>
+</body>
+</html>

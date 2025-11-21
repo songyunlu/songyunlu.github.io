@@ -60,6 +60,7 @@
         const DijkstraVisualizer = () => {
             // -- State --
             const [nodeCount, setNodeCount] = useState(10);
+            const [edgeDensity, setEdgeDensity] = useState(1.5); // New Density State
             const [animationSpeed, setAnimationSpeed] = useState(1000); 
             const [graph, setGraph] = useState({ nodes: [], edges: [] });
             const [steps, setSteps] = useState([]);
@@ -172,7 +173,7 @@
             };
 
             // -- Graph Logic --
-            const generateGraph = useCallback((count) => {
+            const generateGraph = useCallback((count, density) => {
                 const nodes = [];
                 const edges = [];
 
@@ -185,14 +186,16 @@
                     });
                 }
 
+                // Basic connectivity (Ring/Line)
                 for(let i=0; i<count-1; i++){
                     const weight = Math.floor(Math.random() * 10) + 1;
                     edges.push({ source: i, target: i+1, weight });
                 }
                 
-                const extraEdges = Math.floor(count * 1.1); 
+                // Add random edges based on Density
+                const extraEdges = Math.floor(count * density); 
                 let attempts = 0;
-                while(edges.length < (count - 1) + extraEdges && attempts < 150) {
+                while(edges.length < (count - 1) + extraEdges && attempts < 300) {
                     const source = Math.floor(Math.random() * count);
                     const target = Math.floor(Math.random() * count);
                     attempts++;
@@ -215,7 +218,7 @@
                 const distances = {};
                 const visited = new Set();
                 const previous = {};
-                const sptEdges = new Set(); // Track confirmed Shortest Path Tree edges
+                const sptEdges = new Set(); 
                 
                 nodes.forEach(node => {
                     distances[node.id] = Infinity;
@@ -254,7 +257,6 @@
 
                     if (minNode === null) break;
 
-                    // Add the confirmed edge to the SPT (if not start node)
                     if (previous[minNode] !== null) {
                         const u = Math.min(minNode, previous[minNode]);
                         const v = Math.max(minNode, previous[minNode]);
@@ -336,13 +338,13 @@
             // -- Effects --
             useEffect(() => {
                 reset();
-            }, [nodeCount]);
+            }, [nodeCount, edgeDensity]); // Re-run on density change
 
             const reset = () => {
                 setIsPlaying(false);
                 setIsFinished(false);
                 setCurrentStepIndex(0);
-                const newGraph = generateGraph(nodeCount);
+                const newGraph = generateGraph(nodeCount, edgeDensity);
                 setGraph(newGraph);
                 const newSteps = generateDijkstraSteps(newGraph, 0);
                 setSteps(newSteps);
@@ -411,15 +413,13 @@
                 setPan({ x: 0, y: 0 });
             };
 
-            // Handles clicking on the background to Pan
             const handleCanvasMouseDown = (e) => {
                 setIsPanning(true);
                 lastMousePos.current = { x: e.clientX, y: e.clientY };
             };
 
-            // Handles clicking on a specific node to Drag
             const handleNodeMouseDown = (e, nodeId) => {
-                e.stopPropagation(); // Stop the canvas from receiving this event (prevents pan)
+                e.stopPropagation();
                 setDraggingNode(nodeId);
                 lastMousePos.current = { x: e.clientX, y: e.clientY };
             };
@@ -430,12 +430,10 @@
                 lastMousePos.current = { x: e.clientX, y: e.clientY };
 
                 if (draggingNode !== null) {
-                    // We are dragging a node
                     setGraph(prevGraph => ({
                         ...prevGraph,
                         nodes: prevGraph.nodes.map(node => {
                             if (node.id === draggingNode) {
-                                // Move node, correcting for zoom
                                 return {
                                     ...node,
                                     x: node.x + dx / zoom,
@@ -446,7 +444,6 @@
                         })
                     }));
                 } else if (isPanning) {
-                    // We are panning the background
                     setPan(p => ({ x: p.x + dx, y: p.y + dy }));
                 }
             };
@@ -471,14 +468,12 @@
             };
 
             const getEdgeColor = (u, v) => {
-                // Check for confirmed SPT edges first
                 if (currentStep.sptEdges) {
                     const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
                     if (currentStep.sptEdges.has(edgeKey)) {
                         return COLORS.path;
                     }
                 }
-
                 const h = currentStep.highlightEdge;
                 if (h) {
                     if ((h.source === u && h.target === v) || (h.source === v && h.target === u)) {
@@ -489,14 +484,12 @@
             };
 
             const getEdgeWidth = (u, v) => {
-                // Check for confirmed SPT edges first
                 if (currentStep.sptEdges) {
                     const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
                     if (currentStep.sptEdges.has(edgeKey)) {
                         return 6; 
                     }
                 }
-
                 const h = currentStep.highlightEdge;
                 if (h && ((h.source === u && h.target === v) || (h.source === v && h.target === u))) {
                     return 7;
@@ -512,10 +505,7 @@
                     
                     /* 1. Title & Icon (Left / Top) */
                     React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
-                        /* Icon - Blue */
                         React.createElement(Network, { size: 38, className: "text-blue-400" }),
-                        
-                        /* Title Column - Blue Title + Grey Subtitle */
                         React.createElement("div", { className: "flex flex-col" },
                             React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-blue-400 whitespace-nowrap leading-none tracking-tight" }, "Dijkstra's Algorithm"),
                             React.createElement("span", { className: "text-sm text-slate-400 font-medium" }, "Single-Source Shortest Path")
@@ -526,7 +516,7 @@
                     React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
                         
                         /* Sliders Group */
-                        React.createElement("div", { className: "flex items-center gap-4" },
+                        React.createElement("div", { className: "flex items-center gap-4 flex-wrap justify-center" },
                             /* Nodes Slider */
                             React.createElement("div", { className: "flex items-center gap-2" },
                                 React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Size"),
@@ -538,6 +528,19 @@
                                     className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
                                 }),
                                 React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
+                            ),
+
+                            /* Density Slider (NEW) */
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Density"),
+                                React.createElement("input", {
+                                    type: "range", min: "0", max: "2", step: "0.5",
+                                    value: edgeDensity,
+                                    onChange: (e) => setEdgeDensity(Number(e.target.value)),
+                                    disabled: isPlaying,
+                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
+                                }),
+                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, edgeDensity)
                             ),
 
                             /* Speed Slider */
@@ -552,7 +555,7 @@
                             )
                         ),
 
-                        /* Vertical Separator (Hidden on very small screens if wrapping occurs, visible otherwise) */
+                        /* Vertical Separator */
                         React.createElement("div", { className: "h-6 w-px bg-slate-700 hidden sm:block" }),
 
                         /* Playback Buttons Group */

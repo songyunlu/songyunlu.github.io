@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prim's Algorithm Visualizer (MST)</title>
+    <title>DFS Algorithm Visualizer</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -55,12 +55,12 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitMerge, CheckCircle2, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitBranch, ZoomIn, ZoomOut, Maximize, Layers, ArrowRight } from 'lucide-react';
 
-        const PrimsVisualizer = () => {
+        const DFSVisualizer = () => {
             // -- State --
-            const [nodeCount, setNodeCount] = useState(8);
-            const [edgeDensity, setEdgeDensity] = useState(1.1); // Added State for Density
+            const [nodeCount, setNodeCount] = useState(12);
+            const [density, setDensity] = useState(0.5);
             const [animationSpeed, setAnimationSpeed] = useState(1000); 
             const [graph, setGraph] = useState({ nodes: [], edges: [] });
             const [steps, setSteps] = useState([]);
@@ -71,8 +71,8 @@
             // Zoom & Pan & Drag State
             const [zoom, setZoom] = useState(1);
             const [pan, setPan] = useState({ x: 0, y: 0 });
-            const [isPanning, setIsPanning] = useState(false); 
-            const [draggingNode, setDraggingNode] = useState(null); 
+            const [isPanning, setIsPanning] = useState(false); // Dragging background
+            const [draggingNode, setDraggingNode] = useState(null); // Dragging specific node
             const lastMousePos = useRef({ x: 0, y: 0 });
 
             const timerRef = useRef(null);
@@ -81,30 +81,32 @@
 
             // -- Colors --
             const COLORS = {
-                default: '#475569', // Slate 600 (Unvisited)
-                current: '#f59e0b', // Amber 500 (Picking node to add)
-                neighbor: '#6366f1', // Indigo 500 (Checking edge)
-                inMST: '#10b981',   // Emerald 500 (Firmly in MST)
-                update: '#ef4444',  // Red 500 (Found cheaper connection)
-                mstEdge: '#0ea5e9', // Sky 500 (Final MST Edge)
-                edgeDefault: '#334155', // Slate 700
-                edgeActive: '#fbbf24', // Amber 400
+                default: '#334155', // Slate 700
+                visited: '#10b981', // Emerald 500 (Done)
+                stackTop: '#8b5cf6', // Violet 500 (Current Head of Stack)
+                onStack: '#6366f1', // Indigo 500 (In Stack/Recursion)
+                backtracking: '#f59e0b', // Amber 500 (Popping)
+                
+                edgeDefault: '#1e293b', // Slate 800
+                edgeTraverse: '#8b5cf6', // Violet 500 (Active Path)
+                edgeBacktrack: '#f59e0b', // Amber 500
                 text: '#e2e8f0'
             };
 
-            // -- Physics Layout Logic (Reused) --
+            // -- Physics Layout Logic (Runs once on generation) --
             const runForceLayout = (nodes, edges, width, height) => {
                 const iterations = 300; 
-                const repulsion = 10000; 
-                const springLength = 220; 
-                const k = 0.03; 
+                const repulsion = 8000; 
+                const springLength = 150; 
+                const k = 0.05; 
                 const damping = 0.85;
-                const centerForce = 0.015; 
-                const collisionRadius = 90; 
+                const centerForce = 0.02; 
+                const collisionRadius = 80; 
 
                 let velocities = nodes.map(() => ({ x: 0, y: 0 }));
 
                 for (let i = 0; i < iterations; i++) {
+                    // 0. Center Gravity 
                     nodes.forEach((node, idx) => {
                         const dx = (width / 2) - node.x;
                         const dy = (height / 2) - node.y;
@@ -112,6 +114,7 @@
                         velocities[idx].y += dy * centerForce;
                     });
 
+                    // 1. Repulsion & Collision
                     for (let a = 0; a < nodes.length; a++) {
                         for (let b = 0; b < nodes.length; b++) {
                             if (a === b) continue;
@@ -136,6 +139,7 @@
                         }
                     }
 
+                    // 2. Attraction 
                     edges.forEach(edge => {
                         const sourceIdx = nodes.findIndex(n => n.id === edge.source);
                         const targetIdx = nodes.findIndex(n => n.id === edge.target);
@@ -155,6 +159,7 @@
                         velocities[targetIdx].y -= fy;
                     });
 
+                    // 3. Update Positions & Bounds
                     nodes.forEach((node, idx) => {
                         node.x += velocities[idx].x;
                         node.y += velocities[idx].y;
@@ -168,8 +173,8 @@
                 }
             };
 
-            // -- Graph Generation --
-            const generateGraph = useCallback((count, density) => { // Accept density as arg
+            // -- Graph Logic --
+            const generateGraph = useCallback((count, currentDensity) => {
                 const nodes = [];
                 const edges = [];
 
@@ -182,23 +187,22 @@
                     });
                 }
 
-                // Ensure connectivity: Chain them first
+                // Generate a simpler structure for DFS (more tree-like with some cycles)
+                // Connect i to i+1 to ensure connectivity
                 for(let i=0; i<count-1; i++){
-                    const weight = Math.floor(Math.random() * 9) + 1;
-                    edges.push({ source: i, target: i+1, weight });
+                    edges.push({ source: i, target: i+1 });
                 }
                 
-                // Add random edges based on density
-                const extraEdges = Math.floor(count * density); 
+                // Add random edges
+                const extraEdges = Math.floor(count * currentDensity); 
                 let attempts = 0;
-                while(edges.length < (count - 1) + extraEdges && attempts < 200) {
+                while(edges.length < (count - 1) + extraEdges && attempts < 150) {
                     const source = Math.floor(Math.random() * count);
                     const target = Math.floor(Math.random() * count);
                     attempts++;
                     
                     if(source !== target && !edges.find(e => (e.source === source && e.target === target) || (e.source === target && e.target === source))) {
-                        const weight = Math.floor(Math.random() * 9) + 1;
-                        edges.push({ source, target, weight });
+                        edges.push({ source, target });
                     }
                 }
 
@@ -206,152 +210,111 @@
                 return { nodes, edges };
             }, []);
 
-            // -- Prim's Logic --
-            const generatePrimsSteps = (graphData, startNodeId = 0) => {
+            const generateDFSSteps = (graphData, startNodeId = 0) => {
                 const stepsLog = [];
                 const { nodes, edges } = graphData;
-                const n = nodes.length;
                 
-                // "Key" values used to pick minimum weight edge to connect to MST
-                const keys = {}; 
-                const parent = {}; // To store the MST structure
-                const inMST = new Set(); // Track nodes included in MST
-                const mstEdges = new Set(); // Track confirmed MST edges strings "u-v"
-                let currentMSTWeight = 0; // Track total weight
-                
-                // Initialize
-                nodes.forEach(node => {
-                    keys[node.id] = Infinity;
-                    parent[node.id] = null;
+                // Build Adjacency List
+                const adj = {};
+                nodes.forEach(n => adj[n.id] = []);
+                edges.forEach(e => {
+                    adj[e.source].push(e.target);
+                    adj[e.target].push(e.source);
                 });
-                
-                // Start with arbitrary node (0)
-                keys[startNodeId] = 0;
+                // Sort neighbors by ID for deterministic behavior
+                Object.keys(adj).forEach(k => adj[k].sort((a, b) => a - b));
 
-                const getNeighbors = (id) => {
-                    const neighbors = [];
-                    edges.forEach(edge => {
-                        if (edge.source === id) neighbors.push({ id: edge.target, weight: edge.weight });
-                        if (edge.target === id) neighbors.push({ id: edge.source, weight: edge.weight });
-                    });
-                    return neighbors;
-                };
+                const stack = [startNodeId];
+                const visited = new Set();
+                const pathHistory = []; 
+                const parent = {}; 
+                const traversalEdges = new Set();
 
                 stepsLog.push({
-                    keys: { ...keys },
-                    inMST: new Set(inMST),
-                    mstEdges: new Set(mstEdges),
-                    mstWeight: currentMSTWeight,
-                    currentNode: null,
-                    highlightEdge: null,
-                    description: `Initialized graph. Keys (min cost to connect) set to ∞. Starting at Node ${nodes[startNodeId].label} (Key: 0).`
+                    stack: [...stack],
+                    visited: new Set(visited),
+                    traversalEdges: new Set(traversalEdges),
+                    currentNode: startNodeId,
+                    description: `Initialized DFS. Pushed Start Node ${nodes[startNodeId].label} to Stack.`
                 });
 
-                // Loop until all nodes are in MST
-                for (let i = 0; i < n; i++) {
-                    // 1. Pick node with min key value not yet in MST
-                    let minNode = null;
-                    let minKey = Infinity;
+                // Explicit Stack Simulation
+                while (stack.length > 0) {
+                    const current = stack[stack.length - 1]; // Peek
 
-                    nodes.forEach(node => {
-                        if (!inMST.has(node.id) && keys[node.id] < minKey) {
-                            minKey = keys[node.id];
-                            minNode = node.id;
-                        }
-                    });
-
-                    // If graph is disconnected, we might break early, 
-                    // but our generator ensures connectivity usually.
-                    if (minNode === null) break;
-
-                    // Before processing, highlight selection
-                    stepsLog.push({
-                        keys: { ...keys },
-                        inMST: new Set(inMST),
-                        mstEdges: new Set(mstEdges),
-                        mstWeight: currentMSTWeight,
-                        currentNode: minNode,
-                        highlightEdge: null,
-                        type: 'pick',
-                        description: `Selected Node ${nodes[minNode].label} (Min Key: ${minKey}). Adding to MST.`
-                    });
-
-                    // Add to MST
-                    inMST.add(minNode);
-                    
-                    // If it has a parent, finalize that edge into the MST visual and add weight
-                    if (parent[minNode] !== null) {
-                        const u = Math.min(minNode, parent[minNode]);
-                        const v = Math.max(minNode, parent[minNode]);
-                        mstEdges.add(`${u}-${v}`);
-                        
-                        // Add to total weight (keys[minNode] holds the weight of the edge connecting to parent)
-                        if (keys[minNode] !== Infinity) {
-                            currentMSTWeight += keys[minNode];
-                        }
+                    // Check if we need to mark as visited
+                    if (!visited.has(current)) {
+                        visited.add(current);
+                        pathHistory.push(current);
+                        stepsLog.push({
+                            stack: [...stack],
+                            visited: new Set(visited),
+                            traversalEdges: new Set(traversalEdges),
+                            currentNode: current,
+                            type: 'visit',
+                            description: `Visiting Node ${nodes[current].label}.`
+                        });
                     }
 
-                    // 2. Update neighbors
-                    const neighbors = getNeighbors(minNode);
+                    // Find first unvisited neighbor
+                    const neighbors = adj[current] || [];
+                    let foundUnvisited = false;
                     
                     for (let neighbor of neighbors) {
-                        if (inMST.has(neighbor.id)) continue; // Already in MST
-
-                        // Check step
-                        stepsLog.push({
-                            keys: { ...keys },
-                            inMST: new Set(inMST),
-                            mstEdges: new Set(mstEdges),
-                            mstWeight: currentMSTWeight,
-                            currentNode: minNode,
-                            checkingNeighbor: neighbor.id,
-                            highlightEdge: { source: minNode, target: neighbor.id },
-                            type: 'check',
-                            description: `Checking edge ${nodes[minNode].label}-${nodes[neighbor.id].label} (Weight: ${neighbor.weight}).`
-                        });
-
-                        // Update Key if lighter edge found
-                        if (neighbor.weight < keys[neighbor.id]) {
-                            keys[neighbor.id] = neighbor.weight;
-                            parent[neighbor.id] = minNode;
+                        if (!visited.has(neighbor)) {
+                            foundUnvisited = true;
+                            parent[neighbor] = current;
+                            stack.push(neighbor);
                             
+                            // Mark edge as part of tree
+                            const edgeKey = `${Math.min(current, neighbor)}-${Math.max(current, neighbor)}`;
+                            traversalEdges.add(edgeKey);
+
                             stepsLog.push({
-                                keys: { ...keys },
-                                inMST: new Set(inMST),
-                                mstEdges: new Set(mstEdges),
-                                mstWeight: currentMSTWeight,
-                                currentNode: minNode,
-                                checkingNeighbor: neighbor.id,
-                                highlightEdge: { source: minNode, target: neighbor.id },
-                                type: 'update',
-                                description: `Found cheaper connection for Node ${nodes[neighbor.id].label}! Updating Key to ${neighbor.weight}.`
+                                stack: [...stack],
+                                visited: new Set(visited),
+                                traversalEdges: new Set(traversalEdges),
+                                currentNode: current,
+                                targetNode: neighbor,
+                                highlightEdge: { source: current, target: neighbor },
+                                type: 'explore',
+                                description: `Found unvisited neighbor ${nodes[neighbor].label}. Going deeper...`
                             });
+                            break; // Break to simulate "Depth First" - we go down this path immediately
                         }
                     }
-                    
-                    // Finished processing this node's neighbors
-                    stepsLog.push({
-                        keys: { ...keys },
-                        inMST: new Set(inMST),
-                        mstEdges: new Set(mstEdges),
-                        mstWeight: currentMSTWeight,
-                        currentNode: null,
-                        lastProcessed: minNode,
-                        highlightEdge: null,
-                        type: 'processed',
-                        description: `Finished processing Node ${nodes[minNode].label}. It is now firmly in the MST.`
-                    });
+
+                    if (!foundUnvisited) {
+                        // Backtracking
+                        const popped = stack.pop();
+                        
+                        // Find where we are backtracking TO (the new top of stack)
+                        const newTop = stack.length > 0 ? stack[stack.length-1] : null;
+                        let highlightEdge = null;
+                        if (newTop !== null) {
+                             highlightEdge = { source: popped, target: newTop };
+                        }
+
+                        stepsLog.push({
+                            stack: [...stack],
+                            visited: new Set(visited),
+                            traversalEdges: new Set(traversalEdges),
+                            currentNode: popped,
+                            targetNode: newTop,
+                            highlightEdge: highlightEdge,
+                            type: 'backtrack',
+                            description: `No unvisited neighbors for ${nodes[popped].label}. Backtracking to ${newTop !== null ? nodes[newTop].label : 'End'}.`
+                        });
+                    }
                 }
 
                 stepsLog.push({
-                    keys: { ...keys },
-                    inMST: new Set(inMST),
-                    mstEdges: new Set(mstEdges),
-                    mstWeight: currentMSTWeight,
+                    stack: [],
+                    visited: new Set(visited),
+                    traversalEdges: new Set(traversalEdges),
                     currentNode: null,
-                    highlightEdge: null,
                     type: 'finished',
-                    description: "Prim's Algorithm Complete. Minimum Spanning Tree (MST) constructed."
+                    description: "DFS Traversal Complete."
                 });
 
                 return stepsLog;
@@ -360,15 +323,15 @@
             // -- Effects --
             useEffect(() => {
                 reset();
-            }, [nodeCount, edgeDensity]); // Trigger reset on density change
+            }, [nodeCount, density]);
 
             const reset = () => {
                 setIsPlaying(false);
                 setIsFinished(false);
                 setCurrentStepIndex(0);
-                const newGraph = generateGraph(nodeCount, edgeDensity);
+                const newGraph = generateGraph(nodeCount, density);
                 setGraph(newGraph);
-                const newSteps = generatePrimsSteps(newGraph, 0);
+                const newSteps = generateDFSSteps(newGraph, 0);
                 setSteps(newSteps);
             };
 
@@ -421,11 +384,30 @@
             };
 
             // -- Zoom / Pan / Drag Handlers --
-            const handleZoomIn = (e) => { e.stopPropagation(); setZoom(z => Math.min(z * 1.2, 4)); };
-            const handleZoomOut = (e) => { e.stopPropagation(); setZoom(z => Math.max(z / 1.2, 0.5)); };
-            const handleFitView = (e) => { e.stopPropagation(); setZoom(1); setPan({ x: 0, y: 0 }); };
-            const handleCanvasMouseDown = (e) => { setIsPanning(true); lastMousePos.current = { x: e.clientX, y: e.clientY }; };
-            const handleNodeMouseDown = (e, nodeId) => { e.stopPropagation(); setDraggingNode(nodeId); lastMousePos.current = { x: e.clientX, y: e.clientY }; };
+            const handleZoomIn = (e) => {
+                e.stopPropagation();
+                setZoom(z => Math.min(z * 1.2, 4));
+            };
+            const handleZoomOut = (e) => {
+                e.stopPropagation();
+                setZoom(z => Math.max(z / 1.2, 0.5));
+            };
+            const handleFitView = (e) => {
+                e.stopPropagation();
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+            };
+
+            const handleCanvasMouseDown = (e) => {
+                setIsPanning(true);
+                lastMousePos.current = { x: e.clientX, y: e.clientY };
+            };
+
+            const handleNodeMouseDown = (e, nodeId) => {
+                e.stopPropagation();
+                setDraggingNode(nodeId);
+                lastMousePos.current = { x: e.clientX, y: e.clientY };
+            };
 
             const handleMouseMove = (e) => {
                 const dx = e.clientX - lastMousePos.current.x;
@@ -437,7 +419,11 @@
                         ...prevGraph,
                         nodes: prevGraph.nodes.map(node => {
                             if (node.id === draggingNode) {
-                                return { ...node, x: node.x + dx / zoom, y: node.y + dy / zoom };
+                                return {
+                                    ...node,
+                                    x: node.x + dx / zoom,
+                                    y: node.y + dy / zoom
+                                };
                             }
                             return node;
                         })
@@ -447,47 +433,63 @@
                 }
             };
 
-            const handleMouseUp = () => { setIsPanning(false); setDraggingNode(null); };
+            const handleMouseUp = () => {
+                setIsPanning(false);
+                setDraggingNode(null);
+            };
 
             // -- Render Logic --
-            const currentStep = steps[currentStepIndex] || { keys: {}, inMST: new Set(), description: "Ready...", mstWeight: 0 };
+            const currentStep = steps[currentStepIndex] || { stack: [], visited: new Set(), description: "Ready..." };
             
             const getNodeColor = (nodeId) => {
-                if (currentStep.currentNode === nodeId) return COLORS.current;
-                if (currentStep.checkingNeighbor === nodeId) {
-                    if (currentStep.type === 'update') return COLORS.update;
-                    return COLORS.neighbor;
+                // 1. Is it the top of the stack? (Currently processing)
+                if (currentStep.stack.length > 0 && currentStep.stack[currentStep.stack.length - 1] === nodeId) {
+                    return COLORS.stackTop; 
                 }
-                if (currentStep.inMST.has(nodeId)) return COLORS.inMST;
+                // 2. Is it in the stack (active recursion branch)?
+                if (currentStep.stack.includes(nodeId)) {
+                    return COLORS.onStack;
+                }
+                // 3. Is it being backtracked FROM?
+                if (currentStep.type === 'backtrack' && currentStep.currentNode === nodeId) {
+                    return COLORS.backtracking;
+                }
+                // 4. Is it fully visited (and popped)?
+                if (currentStep.visited.has(nodeId)) {
+                    return COLORS.visited;
+                }
                 return COLORS.default;
             };
 
             const getEdgeColor = (u, v) => {
-                // MST edges (confirmed)
-                if (currentStep.mstEdges) {
-                    const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
-                    if (currentStep.mstEdges.has(edgeKey)) {
-                        return COLORS.mstEdge;
-                    }
-                }
-
+                const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                
+                // Highlight specific edge in Explore or Backtrack
                 const h = currentStep.highlightEdge;
                 if (h) {
                     if ((h.source === u && h.target === v) || (h.source === v && h.target === u)) {
-                        return COLORS.edgeActive;
+                        return currentStep.type === 'backtrack' ? COLORS.edgeBacktrack : COLORS.edgeTraverse;
                     }
                 }
+
+                // Part of the Traversal Tree
+                if (currentStep.traversalEdges && currentStep.traversalEdges.has(edgeKey)) {
+                    return COLORS.edgeTraverse;
+                }
+
                 return COLORS.edgeDefault;
             };
 
             const getEdgeWidth = (u, v) => {
-                if (currentStep.mstEdges) {
-                    const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
-                    if (currentStep.mstEdges.has(edgeKey)) return 6; 
-                }
                 const h = currentStep.highlightEdge;
-                if (h && ((h.source === u && h.target === v) || (h.source === v && h.target === u))) return 7;
-                return 3;
+                if (h && ((h.source === u && h.target === v) || (h.source === v && h.target === u))) {
+                    return 6;
+                }
+                const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                if (currentStep.traversalEdges && currentStep.traversalEdges.has(edgeKey)) {
+                    return 4;
+                }
+                return 2;
             };
 
             return (
@@ -498,45 +500,41 @@
                     
                     /* Title */
                     React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
-                        React.createElement(GitMerge, { size: 38, className: "text-indigo-500 rotate-90" }),
+                        React.createElement(GitBranch, { size: 38, className: "text-violet-400" }),
                         React.createElement("div", { className: "flex flex-col" },
-                            React.createElement("h1", { className: "text-2xl font-bold text-indigo-400 whitespace-nowrap leading-none" }, "Prim's Algorithm"),
-                            React.createElement("span", { className: "text-sm text-slate-500 font-medium mt-1" }, "Minimum Spanning Tree (MST)")
+                            React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-violet-400 whitespace-nowrap leading-none tracking-tight" }, "Depth-First Search"),
+                            React.createElement("span", { className: "text-sm text-slate-400 font-medium" }, "Recursive Graph Traversal")
                         )
                     ),
 
                     /* Controls */
                     React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
-                        
-                        /* Sliders */
                         React.createElement("div", { className: "flex items-center gap-4" },
-                            /* Size */
                             React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Nodes"),
+                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Size"),
                                 React.createElement("input", {
-                                    type: "range", min: "4", max: "15", step: "1",
+                                    type: "range", min: "5", max: "20", step: "1",
                                     value: nodeCount,
                                     onChange: (e) => setNodeCount(Number(e.target.value)),
                                     disabled: isPlaying,
-                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-violet-500 disabled:opacity-50"
                                 }),
                                 React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
                             ),
-
-                            /* Density */
+                            
+                            /* Density Slider */
                             React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Density"),
+                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Dens"),
                                 React.createElement("input", {
                                     type: "range", min: "0", max: "2", step: "0.1",
-                                    value: edgeDensity,
-                                    onChange: (e) => setEdgeDensity(Number(e.target.value)),
+                                    value: density,
+                                    onChange: (e) => setDensity(Number(e.target.value)),
                                     disabled: isPlaying,
-                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
+                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-violet-500 disabled:opacity-50"
                                 }),
-                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-6" }, edgeDensity.toFixed(1))
+                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-6" }, density.toFixed(1))
                             ),
 
-                            /* Speed */
                             React.createElement("div", { className: "flex items-center gap-2" },
                                 React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
                                 React.createElement("input", {
@@ -547,11 +545,7 @@
                                 })
                             )
                         ),
-
-                        /* Separator */
                         React.createElement("div", { className: "h-6 w-px bg-slate-700 hidden sm:block" }),
-
-                        /* Playback */
                         React.createElement("div", { className: "flex items-center gap-3" },
                             React.createElement("button", { onClick: reset, className: "text-slate-400 hover:text-white transition-all", title: "Reset" },
                                 React.createElement(RotateCcw, { size: 18 })
@@ -561,7 +555,7 @@
                             ),
                             React.createElement("button", { 
                                 onClick: togglePlay, 
-                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95"
+                                className: "p-2 bg-violet-600 hover:bg-violet-500 text-white rounded-full shadow-lg shadow-violet-900/50 transition-all hover:scale-105 active:scale-95"
                             },
                                 isPlaying 
                                     ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
@@ -574,9 +568,9 @@
                     )
                 ),
 
-                /* Instructions */
+                /* Description */
                 React.createElement("div", { className: "w-full max-w-5xl min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center text-center shadow-sm" },
-                    React.createElement("p", { className: "text-md text-indigo-100 font-medium animate-fade-in" }, currentStep.description)
+                    React.createElement("p", { className: "text-md text-violet-100 font-medium animate-fade-in" }, currentStep.description)
                 ),
 
                 /* Main Content */
@@ -585,19 +579,16 @@
                     /* Legend */
                     React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300 border-b border-slate-700 pb-4" },
                         React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.inMST } }), " In MST"
+                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.stackTop } }), " Current (Stack Top)"
                         ),
                         React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.current } }), " Picking Min"
+                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.onStack } }), " In Stack (Recursion)"
                         ),
                         React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.neighbor } }), " Neighbor Check"
+                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.visited } }), " Visited & Popped"
                         ),
                         React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.update } }), " Better Key Found"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.mstEdge } }), " MST Edge"
+                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.backtracking } }), " Backtracking"
                         )
                     ),
 
@@ -609,7 +600,7 @@
                         onMouseUp: handleMouseUp,
                         onMouseLeave: handleMouseUp
                     },
-                        /* Grid Background */
+                        /* Grid */
                         React.createElement("div", { 
                             className: "absolute inset-0 pointer-events-none opacity-20", 
                             style: { 
@@ -636,29 +627,22 @@
                                     if (!s || !t) return null;
                                     const color = getEdgeColor(edge.source, edge.target);
                                     const width = getEdgeWidth(edge.source, edge.target);
-                                    return React.createElement("g", { key: `edge-${idx}`, className: "pointer-events-none" },
-                                        React.createElement("line", {
-                                            x1: s.x, y1: s.y, x2: t.x, y2: t.y,
-                                            stroke: color, strokeWidth: width,
-                                            className: "line-transition"
-                                        }),
-                                        /* Weight */
-                                        React.createElement("circle", {
-                                            cx: (s.x + t.x) / 2, cy: (s.y + t.y) / 2,
-                                            r: 12, fill: "#1e293b", stroke: color, strokeWidth: 1
-                                        }),
-                                        React.createElement("text", {
-                                            x: (s.x + t.x) / 2, y: (s.y + t.y) / 2,
-                                            dy: 4, textAnchor: "middle", fill: "#94a3b8", fontSize: 11, fontWeight: "bold"
-                                        }, edge.weight)
-                                    );
+                                    return React.createElement("line", {
+                                        key: `edge-${idx}`,
+                                        x1: s.x, y1: s.y, x2: t.x, y2: t.y,
+                                        stroke: color, strokeWidth: width,
+                                        strokeLinecap: "round",
+                                        className: "line-transition pointer-events-none"
+                                    });
                                 }),
 
                                 /* Nodes */
                                 graph.nodes.map((node) => {
-                                    const keyVal = currentStep.keys[node.id];
-                                    const keyLabel = keyVal === Infinity ? "∞" : keyVal;
                                     const isDraggingThis = draggingNode === node.id;
+                                    
+                                    // Determine text label logic for stack index
+                                    const stackIndex = currentStep.stack.indexOf(node.id);
+                                    const showStackIndex = stackIndex !== -1;
 
                                     return React.createElement("g", { 
                                         key: `node-${node.id}`, 
@@ -667,38 +651,32 @@
                                     },
                                         /* Circle */
                                         React.createElement("circle", {
-                                            cx: node.x, cy: node.y, r: 30,
+                                            cx: node.x, cy: node.y, r: 32,
                                             fill: getNodeColor(node.id),
-                                            stroke: isDraggingThis ? '#6366f1' : "#0f172a", 
+                                            stroke: isDraggingThis ? '#8b5cf6' : "#0f172a", 
                                             strokeWidth: isDraggingThis ? 5 : 4,
                                             className: "node-transition"
                                         }),
-                                        /* Node Label */
+                                        /* Label */
                                         React.createElement("text", {
-                                            x: node.x, y: node.y, dy: -6,
+                                            x: node.x, y: node.y, dy: 5,
                                             textAnchor: "middle", fill: "#fff",
-                                            fontWeight: "bold", fontSize: 16,
+                                            fontWeight: "bold", fontSize: 18,
                                             className: "pointer-events-none"
                                         }, node.label),
-                                        /* Key Value */
-                                        React.createElement("text", {
-                                            x: node.x, y: node.y, dy: 14,
-                                            textAnchor: "middle", fill: "rgba(255,255,255,0.8)",
-                                            fontSize: 11, fontWeight: "normal",
+                                        /* Stack Index Indicator */
+                                        showStackIndex && React.createElement("text", {
+                                            x: node.x, y: node.y, dy: -40,
+                                            textAnchor: "middle", fill: "#a78bfa",
+                                            fontSize: 12, fontWeight: "bold",
                                             className: "pointer-events-none"
-                                        }, `k: ${keyLabel}`)
+                                        }, `S:${stackIndex}`)
                                     );
                                 })
                             )
                         ),
                         
-                        /* MST Weight Block */
-                        React.createElement("div", { className: "absolute top-4 right-4 bg-slate-800/90 p-3 rounded-lg border border-slate-700 shadow-xl backdrop-blur-sm flex flex-col items-center min-w-[100px]" },
-                            React.createElement("span", { className: "text-[10px] text-slate-400 uppercase tracking-widest font-bold" }, "MST Weight"),
-                            React.createElement("span", { className: "text-2xl font-mono font-bold text-emerald-400 mt-1" }, currentStep.mstWeight || 0)
-                        ),
-
-                        /* Zoom Overlay */
+                        /* Controls Overlay */
                         React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-2 rounded-lg shadow-xl border border-slate-700" },
                             React.createElement("button", { 
                                 onClick: handleZoomIn,
@@ -713,49 +691,58 @@
                             React.createElement("div", { className: "h-px bg-slate-700 w-full my-1" }),
                             React.createElement("button", { 
                                 onClick: handleFitView,
-                                className: "p-2 hover:bg-slate-700 text-indigo-400 rounded transition-colors",
+                                className: "p-2 hover:bg-slate-700 text-violet-400 rounded transition-colors",
                                 title: "Fit to Screen"
                             }, React.createElement(Maximize, { size: 20 }))
                         )
                     ),
 
-                    /* Key Table */
+                    /* Bottom Panel: Stack Visualization */
                     React.createElement("div", { className: "flex flex-col gap-2" },
-                        React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "Node Keys (Min weight to MST)"),
-                        React.createElement("div", { className: "flex gap-2 overflow-x-auto pb-2" },
-                            graph.nodes.map(node => {
-                                const k = currentStep.keys[node.id];
-                                const isUpdated = currentStep.type === 'update' && currentStep.checkingNeighbor === node.id;
-                                const isFinal = currentStep.inMST.has(node.id);
-                                
-                                return React.createElement("div", { key: node.id, className: `flex flex-col items-center justify-center min-w-[3.5rem] h-16 rounded-lg border transition-colors duration-300 ${
-                                    isUpdated ? 'bg-red-900/50 border-red-500' : 
-                                    isFinal ? 'bg-emerald-900/30 border-emerald-500' :
-                                    'bg-slate-700 border-slate-600'
-                                }` },
-                                    React.createElement("span", { className: "text-xs text-slate-400 font-bold mb-1" }, node.label),
-                                    React.createElement("span", { className: `font-mono text-lg ${k === Infinity ? 'text-slate-500' : 'text-white'}` }, 
-                                        k === Infinity ? "∞" : k
-                                    )
-                                );
-                            })
+                        React.createElement("div", { className: "flex items-center justify-between" },
+                            React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 flex items-center gap-2" }, 
+                                React.createElement(Layers, { size: 14 }), "Recursion Stack (LIFO)"
+                            ),
+                            React.createElement("span", { className: "text-xs text-slate-500" }, "Right = Top of Stack")
+                        ),
+                        
+                        React.createElement("div", { className: "w-full min-h-[80px] bg-slate-900/50 rounded-lg border border-slate-700 p-2 flex items-center gap-2 overflow-x-auto" },
+                            currentStep.stack.length === 0 
+                                ? React.createElement("div", { className: "w-full text-center text-slate-600 italic text-sm" }, "Stack is empty")
+                                : currentStep.stack.map((nodeId, idx) => {
+                                    const isTop = idx === currentStep.stack.length - 1;
+                                    const node = graph.nodes.find(n => n.id === nodeId);
+                                    if(!node) return null;
+
+                                    return React.createElement("div", { key: idx, className: "flex items-center animate-fade-in" },
+                                        /* Arrow */
+                                        idx > 0 && React.createElement(ArrowRight, { size: 16, className: "text-slate-600 mx-1" }),
+                                        
+                                        /* Stack Item */
+                                        React.createElement("div", { className: `flex flex-col items-center justify-center w-12 h-12 rounded-lg border transition-all duration-300 ${
+                                            isTop 
+                                                ? 'bg-violet-900/50 border-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.3)] scale-110' 
+                                                : 'bg-slate-800 border-slate-600 opacity-60'
+                                        }` },
+                                            React.createElement("span", { className: `font-bold ${isTop ? 'text-white' : 'text-slate-400'}` }, node.label),
+                                            React.createElement("span", { className: "text-[10px] text-slate-500" }, idx)
+                                        )
+                                    );
+                                })
                         )
                     ),
                     
-                    /* Footer */
+                    /* Progress Bar */
                     React.createElement("div", { className: "w-full flex justify-between items-center text-xs text-slate-500 border-t border-slate-700 pt-4 mt-2" },
                         React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
                         React.createElement("div", { className: "hidden sm:block w-1/3 h-1 bg-slate-700 rounded-full mx-4" },
                             React.createElement("div", { 
-                                className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                className: "h-full bg-violet-500 rounded-full transition-all duration-100",
                                 style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
                             })
                         ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            isFinished && React.createElement(CheckCircle2, { size: 14, className: "text-emerald-500" }),
-                            React.createElement("span", { className: isFinished ? "text-emerald-500" : "" }, 
-                                isFinished ? "MST Completed" : "Building Tree..."
-                            )
+                        React.createElement("span", { className: isFinished ? "text-emerald-500" : "" }, 
+                            isFinished ? "Traversal Complete" : "Traversing..."
                         )
                     )
                 )
@@ -764,7 +751,7 @@
         };
 
         const root = createRoot(document.getElementById('root'));
-        root.render(React.createElement(PrimsVisualizer));
+        root.render(React.createElement(DFSVisualizer));
     </script>
 </body>
 </html>
