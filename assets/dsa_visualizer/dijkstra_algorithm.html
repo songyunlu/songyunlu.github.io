@@ -507,61 +507,74 @@
             return (
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
                 
-                /* Top Control Bar */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-3 mb-4 flex flex-row flex-nowrap items-center justify-between gap-4 overflow-x-auto z-20 relative" },
+                /* Top Control Bar (Responsive) */
+                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
                     
-                    React.createElement("div", { className: "flex items-center gap-3 flex-shrink-0" },
-                        React.createElement(Network, { size: 24, className: "text-blue-400" }),
-                        React.createElement("h1", { className: "text-lg sm:text-xl font-bold text-blue-400 whitespace-nowrap hidden sm:block" }, "Dijkstra")
+                    /* 1. Title & Icon (Left / Top) */
+                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                        React.createElement(Network, { size: 32, className: "text-blue-500" }),
+                        React.createElement("h1", { className: "text-2xl font-bold text-blue-400 whitespace-nowrap" }, "Dijkstra")
                     ),
 
-                    React.createElement("div", { className: "flex items-center gap-4 flex-shrink-0" },
-                        /* Nodes Slider */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Nodes"),
-                            React.createElement("input", {
-                                type: "range", min: "3", max: "12", step: "1",
-                                value: nodeCount,
-                                onChange: (e) => setNodeCount(Number(e.target.value)),
-                                disabled: isPlaying,
-                                className: "w-16 sm:w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
-                            }),
-                            React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
+                    /* 2. Pill-Shaped Control Container (Right / Bottom) */
+                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
+                        
+                        /* Sliders Group */
+                        React.createElement("div", { className: "flex items-center gap-4" },
+                            /* Nodes Slider */
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Size"),
+                                React.createElement("input", {
+                                    type: "range", min: "3", max: "12", step: "1",
+                                    value: nodeCount,
+                                    onChange: (e) => setNodeCount(Number(e.target.value)),
+                                    disabled: isPlaying,
+                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                                }),
+                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
+                            ),
+
+                            /* Speed Slider */
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
+                                React.createElement("input", {
+                                    type: "range", min: "100", max: "1900", step: "100",
+                                    value: animationSpeed,
+                                    onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                })
+                            )
                         ),
 
-                        React.createElement("div", { className: "h-6 w-px bg-slate-700" }),
+                        /* Vertical Separator (Hidden on very small screens if wrapping occurs, visible otherwise) */
+                        React.createElement("div", { className: "h-6 w-px bg-slate-700 hidden sm:block" }),
 
-                        /* Speed Slider */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
-                            React.createElement("input", {
-                                type: "range", min: "100", max: "1900", step: "100",
-                                value: animationSpeed,
-                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-16 sm:w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                            })
-                        )
-                    ),
-
-                    React.createElement("div", { className: "flex items-center gap-2 flex-shrink-0 ml-auto" },
-                        React.createElement("button", { onClick: reset, className: "p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-all", title: "Reset" },
-                            React.createElement(RotateCcw, { size: 18 })
-                        ),
-                        React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-1.5 text-blue-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
-                            React.createElement(SkipBack, { size: 18 })
-                        ),
-                        React.createElement("button", { 
-                            onClick: togglePlay, 
-                            className: "p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-lg shadow-blue-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
-                        },
-                            isPlaying 
-                                ? React.createElement(Pause, { size: 18, fill: "currentColor" }) 
-                                : React.createElement(Play, { size: 18, fill: "currentColor", className: "ml-0.5" })
-                        ),
-                        React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-1.5 text-blue-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
-                            React.createElement(SkipForward, { size: 18 })
+                        /* Playback Buttons Group */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("button", { onClick: reset, className: "text-slate-400 hover:text-white transition-all", title: "Reset" },
+                                React.createElement(RotateCcw, { size: 18 })
+                            ),
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "text-slate-400 hover:text-white disabled:opacity-30 transition-all" },
+                                React.createElement(SkipBack, { size: 18 })
+                            ),
+                            React.createElement("button", { 
+                                onClick: togglePlay, 
+                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95"
+                            },
+                                isPlaying 
+                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
+                            ),
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "text-slate-400 hover:text-white disabled:opacity-30 transition-all" },
+                                React.createElement(SkipForward, { size: 18 })
+                            )
                         )
                     )
+                ),
+
+                /* Instruction Block */
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center text-center shadow-sm" },
+                    React.createElement("p", { className: "text-md text-blue-100 font-medium animate-fade-in" }, currentStep.description)
                 ),
 
                 /* Main Content Area */
@@ -696,11 +709,6 @@
                                 title: "Fit to Screen"
                             }, React.createElement(Maximize, { size: 20 }))
                         )
-                    ),
-
-                    /* Description Box */
-                    React.createElement("div", { className: "min-h-[60px] bg-slate-700/30 rounded-lg border border-slate-600/50 p-4 flex items-center justify-center text-center" },
-                        React.createElement("p", { className: "text-md text-blue-100 font-medium animate-fade-in" }, currentStep.description)
                     ),
 
                     /* Distance Table (Array Representation) */

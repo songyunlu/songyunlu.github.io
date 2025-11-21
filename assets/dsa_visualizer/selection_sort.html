@@ -56,7 +56,7 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, BarChart3 } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, MousePointerClick, ArrowDown } from 'lucide-react';
 
         const SelectionSortVisualizer = () => {
             // -- State --
@@ -74,11 +74,10 @@
             // -- Colors --
             const COLORS = {
                 default: 'bg-slate-600',
-                scanning: 'bg-amber-500',      // Looking at this element
-                currentMin: 'bg-purple-500',   // Current minimum found so far
-                swapping: 'bg-pink-500',       // Swapping into place
-                sorted: 'bg-emerald-500',      // Locked in place
-                activeTarget: 'bg-blue-500'    // The index we are trying to fill
+                compare: 'bg-amber-500',  // Currently scanning
+                swap: 'bg-red-500',       // Swapping action
+                sorted: 'bg-emerald-500', // Final position
+                min: 'bg-indigo-500',     // Current Minimum found
             };
 
             // -- Algorithm Logic --
@@ -89,88 +88,108 @@
 
             const generateSteps = (initialArray) => {
                 const stepsLog = [];
-                const arrCopy = [...initialArray]; 
-                const n = arrCopy.length;
+                const arr = [...initialArray]; 
+                const n = arr.length;
 
                 stepsLog.push({
-                    array: [...arrCopy],
+                    array: [...arr],
                     type: 'initial',
-                    sortedIndices: [],
-                    description: "Initial array generated. Ready to sort."
+                    highlights: [],
+                    minIdx: null,
+                    compareIdx: null,
+                    sortedLimit: -1,
+                    description: "Initial array. Ready to perform Selection Sort."
                 });
 
-                for (let i = 0; i < n; i++) {
+                // Selection Sort Logic
+                for (let i = 0; i < n - 1; i++) {
                     let minIdx = i;
 
-                    // Step: Highlight the current position we are trying to fill
+                    // Step: Start Pass
                     stepsLog.push({
-                        array: [...arrCopy],
+                        array: [...arr],
                         type: 'start_pass',
-                        activeTarget: i,
-                        currentMin: minIdx,
-                        sortedIndices: Array.from({length: i}, (_, k) => k),
-                        description: `Pass ${i + 1}: Looking for the smallest number from index ${i} to ${n-1}.`
+                        highlights: [i], 
+                        minIdx: i,
+                        compareIdx: null,
+                        sortedLimit: i - 1,
+                        description: `Pass ${i + 1}: Assume the first unsorted element (${arr[i]}) is the minimum.`
                     });
 
                     for (let j = i + 1; j < n; j++) {
-                        // Step: Compare scanner with current minimum
+                        // Step: Compare
                         stepsLog.push({
-                            array: [...arrCopy],
-                            type: 'scan',
-                            activeTarget: i,
-                            currentMin: minIdx,
-                            scanning: j,
-                            sortedIndices: Array.from({length: i}, (_, k) => k),
-                            description: `Checking ${arrCopy[j]}... Is it smaller than current minimum ${arrCopy[minIdx]}?`
+                            array: [...arr],
+                            type: 'compare',
+                            highlights: [j], 
+                            minIdx: minIdx,
+                            compareIdx: j, // Tracking the scanning index
+                            sortedLimit: i - 1,
+                            description: `Scanning: Is ${arr[j]} < ${arr[minIdx]} (Current Min)?`
                         });
 
-                        if (arrCopy[j] < arrCopy[minIdx]) {
+                        if (arr[j] < arr[minIdx]) {
                             minIdx = j;
-                            // Step: Found new minimum
+                            // Step: New Min Found
                             stepsLog.push({
-                                array: [...arrCopy],
+                                array: [...arr],
                                 type: 'new_min',
-                                activeTarget: i,
-                                currentMin: minIdx,
-                                scanning: j,
-                                sortedIndices: Array.from({length: i}, (_, k) => k),
-                                description: `Found new minimum: ${arrCopy[j]}!`
+                                highlights: [j],
+                                minIdx: minIdx, // Update visual min
+                                compareIdx: null,
+                                sortedLimit: i - 1,
+                                description: `Found new minimum: ${arr[j]} at index ${j}.`
                             });
                         }
                     }
 
-                    // Swap if needed
+                    // Step: Swap or Confirm
                     if (minIdx !== i) {
-                        stepsLog.push({
-                            array: [...arrCopy],
-                            type: 'swap',
-                            activeTarget: i,
-                            currentMin: minIdx, // The value moving to i
-                            swappingIndices: [i, minIdx],
-                            sortedIndices: Array.from({length: i}, (_, k) => k),
-                            description: `Swapping minimum (${arrCopy[minIdx]}) into position ${i}.`
+                         // Pre-swap highlight
+                         stepsLog.push({
+                            array: [...arr],
+                            type: 'swap_highlight',
+                            highlights: [i, minIdx],
+                            minIdx: minIdx,
+                            compareIdx: null,
+                            sortedLimit: i - 1,
+                            description: `End of scan. Swapping minimum (${arr[minIdx]}) with current position (${arr[i]}).`
                         });
-                        
-                        let temp = arrCopy[i];
-                        arrCopy[i] = arrCopy[minIdx];
-                        arrCopy[minIdx] = temp;
+
+                        let temp = arr[i];
+                        arr[i] = arr[minIdx];
+                        arr[minIdx] = temp;
+
+                        // Post-swap
+                        stepsLog.push({
+                            array: [...arr],
+                            type: 'swap_done',
+                            highlights: [i, minIdx],
+                            minIdx: null, 
+                            compareIdx: null,
+                            sortedLimit: i, // i is now sorted
+                            description: `Swapped! ${arr[i]} is now in its sorted position.`
+                        });
                     } else {
                          stepsLog.push({
-                            array: [...arrCopy],
+                            array: [...arr],
                             type: 'no_swap',
-                            activeTarget: i,
-                            currentMin: minIdx,
-                            sortedIndices: Array.from({length: i}, (_, k) => k),
-                            description: `${arrCopy[i]} is already the smallest in the range. No swap needed.`
+                            highlights: [i],
+                            minIdx: null,
+                            compareIdx: null,
+                            sortedLimit: i,
+                            description: `The minimum (${arr[i]}) was already in the correct spot.`
                         });
                     }
                 }
                 
-                // Final sorted state
                 stepsLog.push({
-                    array: [...arrCopy],
+                    array: [...arr],
                     type: 'finished',
-                    sortedIndices: Array.from({length: n}, (_, k) => k),
+                    highlights: [],
+                    minIdx: null,
+                    compareIdx: null,
+                    sortedLimit: n - 1, // All sorted
                     description: "Sorting Complete. The array is now fully sorted."
                 });
 
@@ -242,156 +261,177 @@
 
 
             // -- Render Helpers --
-            const getCurrentStep = () => steps[currentStepIndex] || { array: array, description: "Ready to sort", type: 'initial', sortedIndices: [] };
+            const getCurrentStep = () => steps[currentStepIndex] || { array: array, description: "Ready to sort", type: 'initial', sortedLimit: -1 };
 
-            const getVisualState = (index) => {
+            const getBarColor = (index) => {
                 const step = getCurrentStep();
                 
-                // Always show sorted green if marked as sorted
-                if (isSorted || step.type === 'finished' || (step.sortedIndices && step.sortedIndices.includes(index))) {
-                    return { color: COLORS.sorted, textClass: 'bg-emerald-600 text-white' };
+                if (isSorted || step.type === 'finished') return COLORS.sorted;
+
+                // Selection Sort Logic
+                
+                // 1. Highlight the Current Minimum found so far (High priority)
+                if (step.minIdx === index) return COLORS.min;
+
+                // 2. Highlight the Scanner
+                if (step.compareIdx === index) return COLORS.compare;
+
+                // 3. Highlight Swap Actions
+                if ((step.type === 'swap_highlight' || step.type === 'swap_done') && step.highlights.includes(index)) {
+                    return COLORS.swap;
                 }
 
-                // Highlight swapping action
-                if (step.swappingIndices && step.swappingIndices.includes(index)) {
-                    return { color: COLORS.swapping, textClass: 'bg-pink-600 text-white' };
+                // 4. Sorted Portion
+                if (step.sortedLimit !== undefined && index <= step.sortedLimit) {
+                    return COLORS.sorted; 
                 }
-
-                // Highlight the current minimum candidate found
-                if (step.currentMin === index) {
-                    return { color: COLORS.currentMin, textClass: 'bg-purple-600 text-white' };
-                }
-
-                // Highlight the scanning pointer
-                if (step.scanning === index) {
-                    return { color: COLORS.scanning, textClass: 'bg-amber-600 text-white' };
-                }
-
-                // Highlight the index we are trying to fill (the "wall" between sorted and unsorted)
-                if (step.activeTarget === index) {
-                    return { color: COLORS.activeTarget, textClass: 'bg-blue-600 text-white' };
-                }
-
-                // Default state
-                return { color: COLORS.default, textClass: 'bg-slate-700 text-slate-300' };
+                
+                return COLORS.default;
             };
+
+            // Helper to dim bars not involved in active sorting logic to focus attention
+            const getOpacity = (index) => {
+                const step = getCurrentStep();
+                if (isSorted || step.type === 'finished') return 'opacity-100';
+                
+                // If we are deep in the unsorted area and not looking at it
+                if (step.sortedLimit !== undefined && index > step.sortedLimit) {
+                    return 'opacity-100'; // Keep unsorted area visible for searching
+                }
+                return 'opacity-100';
+            }
 
             const currentData = steps[currentStepIndex]?.array || array;
             const currentDesc = steps[currentStepIndex]?.description || "Press Play to start sorting.";
+            const currentMinIdx = steps[currentStepIndex]?.minIdx;
+            const currentCompareIdx = steps[currentStepIndex]?.compareIdx;
 
             return (
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
-                /* Top Bar Container - Single Row Forced */
-                React.createElement("div", { className: "w-full max-w-6xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-3 mb-6 flex items-center justify-between gap-4 overflow-x-auto" },
+                /* Top Bar Wrapper */
+                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-6" },
                     
-                    /* Left: Title */
-                    React.createElement("div", { className: "flex items-center gap-3 flex-shrink-0 pr-4" },
-                        React.createElement(BarChart3, { size: 28, className: "text-purple-400" }),
-                        React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-purple-400 whitespace-nowrap" }, "Selection Sort")
+                    /* Title (Standalone Left) */
+                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                        React.createElement(MousePointerClick, { size: 32, className: "text-indigo-400" }),
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Selection Sort")
                     ),
 
-                    /* Center: Controls */
-                    React.createElement("div", { className: "flex items-center gap-6 flex-shrink-0" },
-                        /* Size */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400 font-bold whitespace-nowrap" }, "SIZE"),
+                    /* Controls (Pill-shaped Container Right) */
+                    React.createElement("div", { className: "flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                        
+                        /* Size Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
                             React.createElement("input", {
                                 type: "range", min: "5", max: "25", step: "1",
                                 value: arraySize,
                                 onChange: (e) => setArraySize(Number(e.target.value)),
                                 disabled: isPlaying,
-                                className: "w-20 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
+                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
                             }),
-                            React.createElement("span", { className: "text-sm text-slate-300 min-w-[20px]" }, arraySize)
+                            React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
                         ),
 
-                        /* Speed */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400 font-bold whitespace-nowrap" }, "SPEED"),
+                        /* Speed Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
                             React.createElement("input", {
                                 type: "range", min: "100", max: "1900", step: "100",
                                 value: animationSpeed,
                                 onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-20 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                             })
                         ),
 
-                        /* Buttons */
-                        React.createElement("div", { className: "flex items-center gap-2 ml-2 border-l border-slate-600 pl-4" },
-                            React.createElement("button", { onClick: reset, className: "p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-all", title: "Reset" },
+                        /* Separator */
+                        React.createElement("div", { className: "h-8 w-px bg-slate-700 hidden sm:block mx-2" }),
+
+                        /* Playback Buttons */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors", title: "Reset" },
                                 React.createElement(RotateCcw, { size: 18 })
                             ),
-                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-1 text-purple-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
                                 React.createElement(SkipBack, { size: 18 })
                             ),
                             React.createElement("button", { 
                                 onClick: togglePlay, 
-                                className: "p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-full shadow-lg shadow-purple-900/50 transition-all hover:scale-105 active:scale-95"
-                                },
+                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                            },
                                 isPlaying 
-                                    ? React.createElement(Pause, { size: 18, fill: "currentColor" }) 
-                                    : React.createElement(Play, { size: 18, fill: "currentColor", className: "ml-0.5" })
+                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
                             ),
-                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-1 text-purple-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
                                 React.createElement(SkipForward, { size: 18 })
                             )
-                        )
-                    ),
-
-                    /* Right: Legend */
-                    React.createElement("div", { className: "flex items-center gap-4 flex-shrink-0 text-xs text-slate-300 pl-4 border-l border-slate-600" },
-                        React.createElement("div", { className: "flex items-center gap-1 whitespace-nowrap" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.sorted}` }), " Sorted"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-1 whitespace-nowrap" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.currentMin}` }), " Min Found"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-1 whitespace-nowrap" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.scanning}` }), " Scanning"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-1 whitespace-nowrap" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.activeTarget}` }), " Target"
                         )
                     )
                 ),
 
-                /* Main Content */
-                React.createElement("div", { className: "w-full max-w-6xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
-                    
-                    /* Description Box */
-                    React.createElement("div", { className: "min-h-[70px] bg-slate-700/50 rounded-lg border border-slate-600 p-4 flex items-center justify-center shadow-inner" },
+                /* Description Box */
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6 flex items-center justify-center shadow-lg" },
                     React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                ),
+
+                /* Main Content */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-4" },
+                    
+                    /* Legend (Top Right) */
+                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 w-full" },
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.min}` }), "Current Min"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.compare}` }), "Scanning"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.swap}` }), "Swap"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.sorted}` }), "Sorted"
+                        )
                     ),
 
+                    /* Divider after Legend */
+                    React.createElement("div", { className: "w-full h-px bg-slate-700/50 my-1" }),
+
                     /* Array Representation */
-                    React.createElement("div", { className: "flex flex-col items-center w-full" },
-                    React.createElement("h3", { className: "text-sm font-semibold text-slate-400 mb-2" }, "ARRAY REPRESENTATION"),
+                    React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
+                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Representation"),
                     React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 px-4" },
-                        currentData.map((val, idx) => {
-                            const { textClass } = getVisualState(idx);
-                            return React.createElement("div", { 
-                                key: idx, 
-                                className: `w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 ${textClass} border border-slate-600`
-                            },
-                                React.createElement("span", null, val),
-                                React.createElement("span", { className: "text-[9px] font-normal opacity-60 leading-none" }, idx)
+                        currentData.map((val, idx) => 
+                        React.createElement("div", { 
+                            key: idx, 
+                            className: `relative w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 border border-slate-600
+                            ${idx === currentMinIdx ? 'border-indigo-400 border-2 -translate-y-2 shadow-indigo-500/50 shadow-md bg-indigo-900 text-indigo-100' : 
+                              (idx === currentCompareIdx ? 'bg-amber-900/50 border-amber-500 text-amber-100' : 'bg-slate-800 text-slate-300')}
+                            ${getOpacity(idx)}`
+                        },
+                            React.createElement("span", null, val),
+                            React.createElement("span", { className: "text-[9px] font-normal text-slate-500 leading-none mt-1" }, idx),
+                            
+                            /* Render little arrow if this is the min */
+                            idx === currentMinIdx && React.createElement("div", { className: "absolute -bottom-5 text-indigo-400 animate-bounce" }, 
+                                React.createElement(ArrowDown, { size: 14 })
                             )
-                        })
+                        )
+                        )
                     )
                     ),
 
                     /* Bar Chart */
-                    React.createElement("div", { className: "relative w-full h-64 sm:h-80 bg-slate-900 rounded-lg p-4 flex items-end justify-center overflow-hidden" },
-                    React.createElement("div", { className: "absolute inset-0 opacity-10 pointer-events-none", style: { backgroundImage: 'radial-gradient(#64748b 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                    React.createElement("div", { className: "relative w-full h-64 sm:h-80 bg-slate-900/50 rounded-lg p-4 flex items-end justify-center overflow-hidden mt-4 border border-slate-800" },
+                    React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
                     React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
                         currentData.map((val, idx) => {
                         const heightPct = (val / 60) * 100;
-                        const { color } = getVisualState(idx);
-                        return React.createElement("div", { key: idx, className: "h-full flex flex-col items-center justify-end w-full max-w-[3rem] group" },
+                        return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group ${getOpacity(idx)}` },
                             React.createElement("span", { className: "text-[10px] text-slate-200 mb-1 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
                             React.createElement("div", { 
-                            className: `w-full rounded-t-md transition-all duration-200 ease-in-out ${color}`,
+                            className: `w-full rounded-t-md transition-all duration-200 ease-in-out ${getBarColor(idx)}`,
                             style: { height: `${heightPct}%` }
                             })
                         );
@@ -400,11 +440,11 @@
                     ),
 
                     /* Footer */
-                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 mt-2" },
                     React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
                     React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full" },
                         React.createElement("div", { 
-                        className: "h-full bg-purple-500 rounded-full transition-all duration-100",
+                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
                         style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
                         })
                     ),

@@ -36,6 +36,7 @@
             background: #64748b; 
         }
         
+        /* Animations */
         @keyframes fade-in {
             from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
@@ -43,16 +44,16 @@
         .animate-fade-in {
             animation: fade-in 0.3s ease-out forwards;
         }
-
-        /* Digit highlighting animation */
-        .digit-highlight {
-            display: inline-block;
-            font-weight: 900;
-            color: #f59e0b; /* Amber 500 */
-            transform: scale(1.2);
-            transition: all 0.2s;
-        }
         
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        .animate-pop {
+            animation: pop 0.2s ease-in-out;
+        }
+
         body {
             background-color: #0f172a; /* Slate 900 */
         }
@@ -64,21 +65,7 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Layers, ArrowDownToLine, ArrowUpFromLine } from 'lucide-react';
-
-        // -- Helper Functions for Radix Sort --
-        const getDigit = (num, place) => Math.floor(Math.abs(num) / Math.pow(10, place)) % 10;
-        const digitCount = (num) => {
-            if (num === 0) return 1;
-            return Math.floor(Math.log10(Math.abs(num))) + 1;
-        };
-        const mostDigits = (nums) => {
-            let maxDigits = 0;
-            for (let i = 0; i < nums.length; i++) {
-                maxDigits = Math.max(maxDigits, digitCount(nums[i]));
-            }
-            return maxDigits;
-        };
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Layers, ArrowDown, Hash } from 'lucide-react';
 
         const RadixSortVisualizer = () => {
             // -- State --
@@ -95,111 +82,146 @@
 
             // -- Colors --
             const COLORS = {
-                default: 'bg-slate-700 border-slate-600',
-                active: 'bg-indigo-600 border-indigo-400',
-                bucketed: 'bg-slate-800 border-slate-700 opacity-50', // When moved to bucket
-                sorted: 'bg-emerald-600 border-emerald-400',
-                highlight: 'bg-amber-600 border-amber-400'
+                default: 'bg-slate-700 text-slate-200',
+                highlight: 'bg-indigo-600 text-white border-indigo-400', // Currently processing
+                bucketActive: 'bg-emerald-900/50 border-emerald-500/50', // Bucket receiving/giving
+                sorted: 'bg-emerald-600 text-white',
+                digit: 'text-amber-400 font-bold', // The specific digit being looked at
+                ghost: 'opacity-30', // Elements temporarily moved to buckets
             };
 
             // -- Algorithm Logic --
+            
+            // Helper to get max value
+            const getMax = (arr) => {
+                let max = 0;
+                for (let val of arr) {
+                    if (val > max) max = val;
+                }
+                return max;
+            }
+
+            // Helper to get digit at specific place (1s, 10s, 100s)
+            // exp = 1 for 1s, 10 for 10s, etc.
+            const getDigit = (num, exp) => {
+                return Math.floor(Math.abs(num) / exp) % 10;
+            }
+
             const generateArray = useCallback((size) => {
-                // Generate numbers with varying digits (2-3 digits for better demo)
-                return Array.from({ length: size }, () => Math.floor(Math.random() * 900) + 10);
+                // Generate numbers between 10 and 999 to ensure we have digits to sort
+                const newArray = Array.from({ length: size }, () => Math.floor(Math.random() * 980) + 15);
+                return newArray;
             }, []);
 
             const generateSteps = (initialArray) => {
                 const stepsLog = [];
-                let currentArray = [...initialArray];
-                const maxK = mostDigits(currentArray);
+                // Copy array for mutation simulation
+                let arr = [...initialArray]; 
+                // Buckets state: Array of 10 arrays
+                let buckets = Array.from({ length: 10 }, () => []);
 
-                // Initial State
+                const maxVal = getMax(arr);
+
                 stepsLog.push({
-                    array: [...currentArray],
-                    buckets: Array.from({ length: 10 }, () => []),
+                    array: [...arr],
+                    buckets: JSON.parse(JSON.stringify(buckets)),
                     type: 'initial',
-                    digitPlace: -1,
-                    activeIdx: -1,
-                    description: "Initial array generated. Ready to sort."
+                    activeIndices: [],
+                    activeExp: 0,
+                    description: "Initial array. We will sort by processing digits from right to left (LSD Radix Sort)."
                 });
 
-                for (let k = 0; k < maxK; k++) {
-                    let buckets = Array.from({ length: 10 }, () => []);
-                    let bucketFlatSnapshots = []; // To track visualizing numbers entering buckets
+                // Iterate through exponents: 1, 10, 100...
+                for (let exp = 1; Math.floor(maxVal / exp) > 0; exp *= 10) {
+                    
+                    // -- DISTRIBUTION PHASE --
+                    
+                    stepsLog.push({
+                        array: [...arr],
+                        buckets: JSON.parse(JSON.stringify(buckets)),
+                        type: 'phase_start',
+                        activeIndices: [],
+                        activeExp: exp,
+                        description: `Starting Pass: Sorting by the ${exp}'s place digits.`
+                    });
 
-                    // 1. Distribution Phase
-                    for (let i = 0; i < currentArray.length; i++) {
-                        const num = currentArray[i];
-                        const digit = getDigit(num, k);
+                    for (let i = 0; i < arr.length; i++) {
+                        const digit = getDigit(arr[i], exp);
                         
-                        // Snapshot: Highlight number and identify digit
+                        // Step: Highlight number and identify digit
                         stepsLog.push({
-                            array: [...currentArray],
-                            buckets: buckets.map(b => [...b]), // Copy buckets
-                            type: 'check_digit',
-                            digitPlace: k,
-                            activeIdx: i,
-                            highlightDigit: digit,
-                            description: `Checking position ${Math.pow(10, k)} of number ${num}. The digit is ${digit}.`
+                            array: [...arr],
+                            buckets: JSON.parse(JSON.stringify(buckets)),
+                            type: 'check',
+                            activeIndices: [i],
+                            activeExp: exp,
+                            highlightDigitVal: digit,
+                            description: `Checking ${arr[i]}: The digit at ${exp}'s place is ${digit}.`
                         });
 
-                        buckets[digit].push(num);
-
-                        // Snapshot: Move to bucket
+                        // Move logic
+                        buckets[digit].push(arr[i]);
+                        
+                        // Step: Move to bucket (Keep in main array as 'ghost' until full collect, or remove? 
+                        // Standard vis usually keeps them in main but dims them, or clears main. 
+                        // Let's dim the main array index to show it's "in" the bucket).
                         stepsLog.push({
-                            array: [...currentArray],
-                            buckets: buckets.map(b => [...b]),
-                            type: 'move_to_bucket',
-                            digitPlace: k,
-                            activeIdx: i, // Still highlight origin
+                            array: [...arr], // We keep the value here for index stability but will flag it as 'moved' in UI
+                            buckets: JSON.parse(JSON.stringify(buckets)),
+                            type: 'distribute',
+                            activeIndices: [i], // This index is now 'moved'
+                            activeExp: exp,
                             targetBucket: digit,
-                            description: `Moving ${num} to bucket ${digit}.`
+                            movedIndices: [...Array(i + 1).keys()], // Indices 0 to i are moved
+                            description: `Moved ${arr[i]} into Bucket ${digit}.`
                         });
                     }
 
-                    // 2. Collection Phase
-                    let newArray = [];
-                    for (let b = 0; b < 10; b++) {
-                        const bucket = buckets[b];
-                        for (let item of bucket) {
-                            newArray.push(item);
-                            
-                            // Snapshot: Move back to array
-                            stepsLog.push({
-                                array: [...newArray.concat(Array(currentArray.length - newArray.length).fill(null))], // Show partial reconstruction
-                                buckets: buckets.map(bk => [...bk]), // Current state of buckets
-                                type: 'collect',
-                                digitPlace: k,
-                                activeBucket: b,
-                                activeVal: item,
-                                description: `Collecting ${item} from bucket ${b} back to the array.`
-                            });
+                    // -- COLLECTION PHASE --
+                    
+                    stepsLog.push({
+                        array: [...arr], // Array effectively empty/ghosted visually here
+                        buckets: JSON.parse(JSON.stringify(buckets)),
+                        type: 'collect_start',
+                        activeIndices: [],
+                        activeExp: exp,
+                        movedIndices: [...Array(arr.length).keys()], // All moved
+                        description: `All numbers distributed. Now collecting back from buckets 0-9.`
+                    });
 
-                            // Remove from visual bucket for next frame (optional, but cleaner to keep until end of loop or shift?)
-                            // For this viz, we keep it in bucket until the active pointer moves, 
-                            // but let's simulate popping visually by updating the bucket in the next step object if needed.
+                    let arrIdx = 0;
+                    for (let b = 0; b < 10; b++) {
+                        if (buckets[b].length > 0) {
+                            
+                            // Copy items from bucket back to array
+                            while(buckets[b].length > 0) {
+                                const val = buckets[b].shift(); // Remove from bucket
+                                arr[arrIdx] = val; // Place in array
+
+                                stepsLog.push({
+                                    array: [...arr],
+                                    buckets: JSON.parse(JSON.stringify(buckets)),
+                                    type: 'collect',
+                                    activeIndices: [arrIdx], // Highlighting the position we just filled
+                                    activeExp: exp,
+                                    activeBucket: b,
+                                    movedIndices: [...Array(arr.length).keys()].filter(k => k > arrIdx), // Remaining indices still ghosted
+                                    description: `Collected ${val} from Bucket ${b}.`
+                                });
+                                
+                                arrIdx++;
+                            }
                         }
                     }
-                    
-                    currentArray = newArray;
-                    
-                    // End of digit pass
-                    stepsLog.push({
-                        array: [...currentArray],
-                        buckets: Array.from({ length: 10 }, () => []), // Clear buckets visually
-                        type: 'pass_complete',
-                        digitPlace: k,
-                        description: `Finished sorting by the ${Math.pow(10, k)}s place.`
-                    });
                 }
-
-                // Finished
+                
                 stepsLog.push({
-                    array: [...currentArray],
+                    array: [...arr],
                     buckets: Array.from({ length: 10 }, () => []),
                     type: 'finished',
-                    digitPlace: -1,
-                    description: "Radix sort complete! The array is fully sorted."
+                    activeIndices: [],
+                    activeExp: 0,
+                    description: "Sort Complete!"
                 });
 
                 return stepsLog;
@@ -222,23 +244,24 @@
 
             useEffect(() => {
                 if (isPlaying) {
-                    timerRef.current = setInterval(() => {
-                        setCurrentStepIndex((prev) => {
-                            if (prev < steps.length - 1) {
-                                return prev + 1;
-                            } else {
-                                setIsPlaying(false);
-                                setIsSorted(true);
-                                clearInterval(timerRef.current);
-                                return prev;
-                            }
-                        });
-                    }, 2000 - animationSpeed);
+                timerRef.current = setInterval(() => {
+                    setCurrentStepIndex((prev) => {
+                    if (prev < steps.length - 1) {
+                        return prev + 1;
+                    } else {
+                        setIsPlaying(false);
+                        setIsSorted(true);
+                        clearInterval(timerRef.current);
+                        return prev;
+                    }
+                    });
+                }, 2000 - animationSpeed);
                 } else {
-                    clearInterval(timerRef.current);
+                clearInterval(timerRef.current);
                 }
                 return () => clearInterval(timerRef.current);
             }, [isPlaying, steps.length, animationSpeed]);
+
 
             // -- Controls --
             const handleNext = () => {
@@ -267,230 +290,237 @@
                 }
             };
 
+
             // -- Render Helpers --
             const currentStep = steps[currentStepIndex] || { 
                 array: array, 
-                buckets: Array.from({length:10}, ()=>[]), 
-                description: "Ready", 
-                type: 'initial',
-                digitPlace: -1 
+                buckets: Array.from({ length: 10 }, () => []),
+                description: "Ready to sort", 
+                type: 'initial' 
             };
 
-            // Helper component to render a number with the active digit highlighted
-            const HighlightedNumber = ({ val, place, isActive }) => {
-                if (val === null || val === undefined) return React.createElement("span", {className: "text-slate-600"}, "-");
-                if (place === -1 || !isActive) return React.createElement("span", null, val);
+            const currentData = currentStep.array;
+            const currentBuckets = currentStep.buckets || [];
+            
+            // Helper to render a number with the specific digit highlighted
+            const renderNumberWithHighlight = (num, exp, highlightColorClass) => {
+                if (!exp) return React.createElement("span", null, num);
+                
+                const str = num.toString();
+                // Calculate position of the digit from the right (0-indexed)
+                // exp=1 -> pos=0, exp=10 -> pos=1, exp=100 -> pos=2
+                const posFromRight = Math.log10(exp);
+                const indexFromLeft = str.length - 1 - posFromRight;
 
-                // Convert to string with leading zeros effectively for visualization logic if needed, 
-                // but standard display usually doesn't show leading zeros. 
-                // We just need to highlight the power of 10.
-                const strVal = val.toString();
-                const len = strVal.length;
-                const targetIndex = len - 1 - place;
-
-                if (targetIndex < 0) {
-                    // The number is smaller than the place (e.g. 45, checking 100s place)
-                    // Effectively the digit is 0 (phantom). We can render a ghost 0 if we want, or just normal.
-                    return (
-                        React.createElement("span", { className: "flex justify-center items-baseline" },
-                            React.createElement("span", { className: "text-slate-500 text-xs mr-0.5 digit-highlight" }, "0"),
-                            React.createElement("span", null, strVal)
-                        )
+                if (indexFromLeft < 0) {
+                    // Number is smaller than the exponent (e.g. 5 vs 100), imaginary 0
+                    return React.createElement(React.Fragment, null,
+                        React.createElement("span", { className: "text-slate-500 opacity-50" }, "0"),
+                        React.createElement("span", null, str)
                     );
                 }
 
-                const before = strVal.substring(0, targetIndex);
-                const digit = strVal.charAt(targetIndex);
-                const after = strVal.substring(targetIndex + 1);
-
-                return (
-                    React.createElement("span", null,
-                        before,
-                        React.createElement("span", { className: "digit-highlight" }, digit),
-                        after
-                    )
+                return React.createElement("span", { className: "flex justify-center" },
+                    str.split('').map((char, idx) => {
+                        const isTarget = idx === indexFromLeft;
+                        return React.createElement("span", { 
+                            key: idx,
+                            className: isTarget ? highlightColorClass : "" 
+                        }, char);
+                    })
                 );
             };
 
-            return (
-                React.createElement("div", { className: "flex flex-col items-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-6" },
+            const getArrayItemClass = (idx) => {
+                if (currentStep.type === 'finished') return COLORS.sorted;
                 
-                /* Header / Controls */
-                React.createElement("div", { className: "w-full max-w-6xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4" },
+                // If we are distributing and this index is in the 'movedIndices' list, it's a ghost
+                if (currentStep.type === 'distribute' || currentStep.type === 'collect_start' || currentStep.type === 'collect') {
+                    if (currentStep.movedIndices && currentStep.movedIndices.includes(idx)) {
+                        return 'opacity-20 grayscale';
+                    }
+                }
+
+                // Active highlighting
+                if (currentStep.activeIndices && currentStep.activeIndices.includes(idx)) {
+                    return COLORS.highlight;
+                }
+
+                return COLORS.default;
+            };
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Top Bar */
+                React.createElement("div", { className: "w-full max-w-6xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-6" },
                     
                     /* Title */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        React.createElement(Layers, { size: 28, className: "text-amber-400" }),
-                        React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-amber-400" }, "Radix Sort")
+                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                        React.createElement(Layers, { size: 32, className: "text-indigo-400" }),
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Radix Sort")
                     ),
 
                     /* Controls */
-                    React.createElement("div", { className: "flex flex-grow items-center justify-center gap-4 flex-wrap" },
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400" }, "SIZE"),
+                    React.createElement("div", { className: "flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                        
+                        /* Size */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
                             React.createElement("input", {
                                 type: "range", min: "5", max: "20", step: "1",
                                 value: arraySize,
                                 onChange: (e) => setArraySize(Number(e.target.value)),
                                 disabled: isPlaying,
-                                className: "w-20 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500 disabled:opacity-50"
+                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
                             }),
-                            React.createElement("span", { className: "text-sm text-slate-300 w-4" }, arraySize)
+                            React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
                         ),
 
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400" }, "SPEED"),
+                        /* Speed */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
                             React.createElement("input", {
                                 type: "range", min: "100", max: "1900", step: "100",
                                 value: animationSpeed,
                                 onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-20 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                             })
                         ),
 
-                        React.createElement("div", { className: "flex items-center gap-2 ml-2" },
-                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-all", title: "Reset" },
+                        /* Separator */
+                        React.createElement("div", { className: "h-8 w-px bg-slate-700 hidden sm:block mx-2" }),
+
+                        /* Buttons */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors", title: "Reset" },
                                 React.createElement(RotateCcw, { size: 18 })
                             ),
-                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-amber-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
-                                React.createElement(SkipBack, { size: 20 })
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipBack, { size: 18 })
                             ),
                             React.createElement("button", { 
                                 onClick: togglePlay, 
-                                className: "p-3 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-full shadow-lg shadow-amber-900/20 transition-all hover:scale-105 active:scale-95"
+                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
                             },
                                 isPlaying 
-                                    ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
-                                    : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-1" })
+                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
                             ),
-                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-amber-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
-                                React.createElement(SkipForward, { size: 20 })
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipForward, { size: 18 })
                             )
-                        )
-                    ),
-
-                    /* Legend */
-                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-3 gap-y-2 text-xs text-slate-300" },
-                        React.createElement("div", { className: "flex items-center gap-1" },
-                            React.createElement("div", { className: `w-3 h-3 rounded bg-indigo-600 border border-indigo-400` }), " Active"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-1" },
-                            React.createElement("div", { className: `w-3 h-3 rounded bg-amber-600 border border-amber-400` }), " Highlight"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-1" },
-                            React.createElement("div", { className: `w-3 h-3 rounded bg-slate-800 border border-slate-600 opacity-50` }), " Bucketed"
                         )
                     )
                 ),
 
+                /* Description Box */
+                React.createElement("div", { className: "w-full max-w-6xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6 flex items-center justify-center shadow-lg relative overflow-hidden" },
+                    /* Background Decoration */
+                    React.createElement("div", { className: "absolute left-0 top-0 h-full w-1 bg-indigo-500" }),
+                    React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in z-10" }, currentStep.description)
+                ),
+
                 /* Main Visualization Area */
-                React.createElement("div", { className: "w-full max-w-6xl flex flex-col gap-6" },
+                React.createElement("div", { className: "w-full max-w-6xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-8" },
                     
-                    /* Status Bar */
-                    React.createElement("div", { className: "w-full min-h-[60px] bg-slate-800/50 rounded-lg border border-slate-700 p-3 flex items-center justify-center shadow-inner backdrop-blur-sm" },
-                        React.createElement("p", { className: "text-base sm:text-lg text-slate-100 font-medium text-center animate-fade-in" }, currentStep.description)
-                    ),
-
-                    /* Main Array Display */
-                    React.createElement("div", { className: "w-full bg-slate-800 rounded-xl border border-slate-700 p-6 flex flex-col items-center" },
-                        React.createElement("div", { className: "flex items-center justify-between w-full mb-4" },
-                            React.createElement("h3", { className: "text-sm font-bold text-slate-400 uppercase tracking-wider" }, "Current Array"),
-                            React.createElement("div", { className: "text-xs text-slate-500 bg-slate-900 px-2 py-1 rounded" }, 
-                                currentStep.digitPlace >= 0 ? `Sorting by: 10^${currentStep.digitPlace} Place` : "Ready"
-                            )
+                    /* Legend */
+                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 w-full" },
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-sm bg-indigo-600` }), "Processing"
                         ),
-                        
-                        React.createElement("div", { className: "flex flex-wrap justify-center gap-2 w-full" },
-                            currentStep.array.map((val, idx) => {
-                                // Determine styling based on step type
-                                let baseClass = "w-12 sm:w-14 h-12 sm:h-14 flex items-center justify-center rounded-lg border-2 text-lg font-mono transition-all duration-300 ";
-                                
-                                if (val === null) {
-                                    // Placeholder for collected item
-                                    return React.createElement("div", { key: idx, className: baseClass + "border-dashed border-slate-700 text-transparent bg-transparent" });
-                                }
-
-                                let colorClass = COLORS.default;
-                                let isDigitActive = false;
-
-                                if (currentStep.type === 'finished') {
-                                    colorClass = COLORS.sorted;
-                                } else if (currentStep.type === 'check_digit' && idx === currentStep.activeIdx) {
-                                    colorClass = COLORS.active;
-                                    isDigitActive = true;
-                                } else if (currentStep.type === 'move_to_bucket' && idx === currentStep.activeIdx) {
-                                    colorClass = COLORS.bucketed; // Dim it as it moves "out"
-                                } else if (currentStep.type === 'collect' && idx < currentStep.array.filter(x=>x!==null).length) {
-                                    // Newly collected items
-                                    colorClass = COLORS.active;
-                                }
-
-                                return React.createElement("div", { 
-                                    key: idx, 
-                                    className: baseClass + colorClass + " shadow-lg"
-                                },
-                                    React.createElement(HighlightedNumber, { 
-                                        val: val, 
-                                        place: currentStep.digitPlace, 
-                                        isActive: isDigitActive || (currentStep.type === 'move_to_bucket' && idx === currentStep.activeIdx)
-                                    })
-                                );
-                            })
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("span", { className: "text-amber-400 font-bold" }, "123"), "Active Digit"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-sm bg-slate-700` }), "Waiting"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-sm bg-emerald-600` }), "Sorted/Collected"
                         )
                     ),
 
-                    /* Arrow Indicator */
-                    React.createElement("div", { className: "flex justify-center -my-2 text-slate-600" },
-                        currentStep.type === 'collect' 
-                            ? React.createElement(ArrowUpFromLine, { size: 32, className: "animate-bounce text-emerald-500" })
-                            : React.createElement(ArrowDownToLine, { size: 32, className: currentStep.type === 'move_to_bucket' ? "animate-bounce text-amber-500" : "opacity-20" })
+                    /* ARRAY ROW */
+                    React.createElement("div", { className: "flex flex-col items-center w-full" },
+                        React.createElement("div", { className: "flex justify-between w-full mb-2 px-2" },
+                             React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-400 uppercase" }, "Main Array"),
+                             currentStep.activeExp ? React.createElement("span", { className: "text-xs font-mono text-indigo-400" }, `Place: ${currentStep.activeExp}s`) : null
+                        ),
+                        
+                        React.createElement("div", { className: "flex flex-wrap justify-center w-full gap-2" },
+                            currentData.map((val, idx) => 
+                                React.createElement("div", { 
+                                    key: idx, 
+                                    className: `relative w-10 sm:w-14 aspect-square flex flex-col items-center justify-center rounded-lg font-mono text-sm sm:text-lg transition-all duration-300 border border-slate-600/50 shadow-lg
+                                    ${getArrayItemClass(idx)}`
+                                },
+                                    renderNumberWithHighlight(val, currentStep.activeExp, "text-amber-400 font-black scale-125 inline-block transition-transform"),
+                                    
+                                    /* Little index number */
+                                    React.createElement("span", { className: "absolute bottom-0.5 right-1 text-[8px] opacity-50" }, idx),
+                                    
+                                    /* Arrow Indicator for active */
+                                    (currentStep.activeIndices && currentStep.activeIndices.includes(idx)) && 
+                                        React.createElement("div", { className: "absolute -top-5 text-indigo-400 animate-bounce" }, 
+                                            React.createElement(ArrowDown, { size: 14 })
+                                        )
+                                )
+                            )
+                        )
                     ),
 
-                    /* Buckets Display */
-                    React.createElement("div", { className: "w-full bg-slate-800 rounded-xl border border-slate-700 p-6" },
-                        React.createElement("h3", { className: "text-sm font-bold text-slate-400 uppercase tracking-wider mb-4" }, "0-9 Buckets"),
-                        
-                        React.createElement("div", { className: "grid grid-cols-2 sm:grid-cols-5 md:grid-cols-10 gap-3" },
-                            Array.from({ length: 10 }).map((_, bucketIdx) => {
-                                const bucketItems = currentStep.buckets[bucketIdx] || [];
-                                const isTarget = (currentStep.type === 'move_to_bucket' || currentStep.type === 'check_digit') && currentStep.targetBucket === bucketIdx;
-                                const isCollecting = currentStep.type === 'collect' && currentStep.activeBucket === bucketIdx;
+                    /* Divider with Down Arrow to indicate flow */
+                    React.createElement("div", { className: "w-full flex items-center justify-center opacity-20" },
+                        React.createElement(ArrowDown, { size: 24 })
+                    ),
 
+                    /* BUCKETS SECTION */
+                    React.createElement("div", { className: "flex flex-col w-full" },
+                        React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-400 uppercase mb-3 px-2" }, "Buckets (0-9)"),
+                        
+                        /* Grid for Buckets */
+                        React.createElement("div", { className: "grid grid-cols-5 sm:grid-cols-10 gap-2 sm:gap-3 w-full" },
+                            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(bucketNum => {
+                                const isTarget = currentStep.targetBucket === bucketNum;
+                                const isCollecting = currentStep.activeBucket === bucketNum;
+                                
                                 return React.createElement("div", { 
-                                    key: bucketIdx, 
-                                    className: `flex flex-col min-h-[12rem] rounded-lg border-2 transition-colors duration-300 bg-slate-900 ${isTarget ? 'border-amber-500 bg-slate-800' : isCollecting ? 'border-emerald-500 bg-slate-800' : 'border-slate-700'}` 
+                                    key: bucketNum,
+                                    className: `flex flex-col h-48 sm:h-56 bg-slate-900/80 rounded-lg border transition-colors duration-300 overflow-hidden
+                                    ${isTarget ? 'border-indigo-500 bg-indigo-900/20 shadow-[0_0_15px_rgba(99,102,241,0.3)]' : 'border-slate-700'}
+                                    ${isCollecting ? 'border-emerald-500 bg-emerald-900/20 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : ''}`
                                 },
-                                    /* Bucket Label */
-                                    React.createElement("div", { className: `text-center py-1 font-bold border-b ${isTarget ? 'bg-amber-900/30 text-amber-400 border-amber-500/30' : 'bg-slate-800 text-slate-500 border-slate-700'}` }, bucketIdx),
+                                    /* Bucket Header */
+                                    React.createElement("div", { className: "flex items-center justify-center py-1 bg-slate-800 border-b border-slate-700 text-slate-400 font-mono text-sm" },
+                                        React.createElement(Hash, { size: 12, className: "mr-1" }), bucketNum
+                                    ),
                                     
-                                    /* Bucket Content (Stack) */
-                                    React.createElement("div", { className: "flex flex-col-reverse p-2 gap-1 flex-grow" },
-                                        bucketItems.map((val, bItemIdx) => {
-                                            // Highlight the item just added
-                                            const isJustAdded = isTarget && bItemIdx === bucketItems.length - 1;
-                                            const isBeingCollected = isCollecting && val === currentStep.activeVal;
-                                            
-                                            return React.createElement("div", { 
-                                                key: bItemIdx,
-                                                className: `text-center text-sm sm:text-base py-1 rounded font-mono transition-all ${isJustAdded ? 'bg-amber-600 text-white scale-110' : isBeingCollected ? 'bg-emerald-600 text-white scale-90' : 'bg-slate-700 text-slate-300'}`
-                                            }, val);
-                                        })
+                                    /* Bucket Contents */
+                                    React.createElement("div", { className: "flex flex-col-reverse gap-1 p-1 h-full overflow-y-auto custom-scrollbar items-center justify-start" },
+                                        currentBuckets[bucketNum].map((val, bIdx) => 
+                                            React.createElement("div", { 
+                                                key: `${bucketNum}-${bIdx}`,
+                                                className: `w-full text-center py-1 px-0.5 text-xs sm:text-sm bg-slate-700 rounded text-slate-200 animate-pop border border-slate-600`
+                                            }, renderNumberWithHighlight(val, currentStep.activeExp, "text-amber-400 font-bold"))
+                                        )
                                     )
                                 );
                             })
                         )
                     ),
 
-                    /* Progress Footer */
-                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 px-2" },
+                    /* Footer Progress */
+                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
                         React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
-                        React.createElement("div", { className: "w-32 sm:w-64 h-1.5 bg-slate-700 rounded-full overflow-hidden" },
+                        React.createElement("div", { className: "w-32 sm:w-64 h-1 bg-slate-700 rounded-full overflow-hidden" },
                             React.createElement("div", { 
-                                className: "h-full bg-amber-500 rounded-full transition-all duration-100",
+                                className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
                                 style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
                             })
                         ),
-                        React.createElement("span", null, isSorted ? "Sorted" : "Sorting...")
+                        React.createElement("span", { className: isSorted ? "text-emerald-400 font-bold" : "" }, 
+                            isSorted ? "Sorted" : "Sorting..."
+                        )
                     )
                 )
                 )

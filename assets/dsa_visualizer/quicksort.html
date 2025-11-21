@@ -56,12 +56,12 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Zap } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Settings, ArrowDown, Fingerprint } from 'lucide-react';
 
         const QuickSortVisualizer = () => {
             // -- State --
             const [arraySize, setArraySize] = useState(15);
-            const [animationSpeed, setAnimationSpeed] = useState(500); 
+            const [animationSpeed, setAnimationSpeed] = useState(800); 
             const [array, setArray] = useState([]);
             const [steps, setSteps] = useState([]);
             const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -75,120 +75,172 @@
             const COLORS = {
                 default: 'bg-slate-600',
                 compare: 'bg-amber-500',
-                swap: 'bg-red-500',
+                swap: 'bg-rose-500',
                 sorted: 'bg-emerald-500',
-                pivot: 'bg-fuchsia-500',
-                range: 'bg-slate-700', 
-                activeBar: 'bg-indigo-500'
+                pivot: 'bg-indigo-500', // The chosen pivot
             };
 
-            // -- Algorithm Logic (Quick Sort) --
+            // -- Algorithm Logic --
             const generateArray = useCallback((size) => {
-                // Generates random numbers between 5 and 55
                 const newArray = Array.from({ length: size }, () => Math.floor(Math.random() * 50) + 5);
                 return newArray;
             }, []);
 
             const generateSteps = (initialArray) => {
                 const stepsLog = [];
-                const arrCopy = [...initialArray]; 
+                const arr = [...initialArray]; 
+                const n = arr.length;
+                const sortedIndices = new Set();
 
+                // Initial State
                 stepsLog.push({
-                    array: [...arrCopy],
+                    array: [...arr],
                     type: 'initial',
-                    range: [0, arrCopy.length - 1],
-                    description: "Initial array generated. Ready to sort."
+                    highlights: [],
+                    pivotIndex: null,
+                    range: [0, n - 1],
+                    sortedIndices: new Set(sortedIndices),
+                    description: "Initial array. Ready to perform Quick Sort."
                 });
 
-                // Lomuto Partition Scheme
-                const partition = (arr, low, high) => {
-                    const pivotValue = arr[high];
-                    
-                    stepsLog.push({
-                        array: [...arr],
-                        type: 'set_pivot',
-                        range: [low, high],
-                        pivotIndex: high,
-                        description: `Selected ${pivotValue} (at index ${high}) as the Pivot.`
-                    });
+                // Recursive QuickSort Function
+                const quickSort = (a, low, high) => {
+                    if (low < high) {
+                        // Partitioning Index
+                        const pi = partition(a, low, high);
 
-                    let i = low - 1;
-
-                    for (let j = low; j < high; j++) {
+                        // After partition, pi is sorted
+                        sortedIndices.add(pi);
                         stepsLog.push({
-                            array: [...arr],
-                            type: 'compare',
+                            array: [...a],
+                            type: 'partition_done',
+                            highlights: [pi],
+                            pivotIndex: pi,
                             range: [low, high],
-                            pivotIndex: high,
-                            highlights: [j],
-                            description: `Comparing ${arr[j]} against Pivot ${pivotValue}.`
+                            sortedIndices: new Set(sortedIndices),
+                            description: `Partition complete. Pivot ${a[pi]} is now in its correct sorted position.`
                         });
 
-                        if (arr[j] < pivotValue) {
+                        quickSort(a, low, pi - 1);
+                        quickSort(a, pi + 1, high);
+                    } else if (low === high) {
+                        // Single element is trivially sorted
+                        sortedIndices.add(low);
+                        stepsLog.push({
+                            array: [...a],
+                            type: 'single_element',
+                            highlights: [low],
+                            pivotIndex: null,
+                            range: [low, high],
+                            sortedIndices: new Set(sortedIndices),
+                            description: `Single element ${a[low]} left. Marked as sorted.`
+                        });
+                    }
+                };
+
+                // Lomuto Partition Scheme
+                const partition = (a, low, high) => {
+                    const pivot = a[high];
+                    let i = low - 1; // Index of smaller element
+
+                    stepsLog.push({
+                        array: [...a],
+                        type: 'pivot_select',
+                        highlights: [high],
+                        pivotIndex: high,
+                        range: [low, high],
+                        sortedIndices: new Set(sortedIndices),
+                        description: `Selected Pivot: ${pivot} (at index ${high}). Partitioning range [${low} to ${high}].`
+                    });
+
+                    for (let j = low; j < high; j++) {
+                        // Compare Step
+                        stepsLog.push({
+                            array: [...a],
+                            type: 'compare',
+                            highlights: [j, high],
+                            pivotIndex: high,
+                            range: [low, high],
+                            activeScanner: j,
+                            activeSmaller: i + 1,
+                            sortedIndices: new Set(sortedIndices),
+                            description: `Comparing: ${a[j]} vs Pivot (${pivot}).`
+                        });
+
+                        if (a[j] < pivot) {
                             i++;
-                            // Swap if smaller
+                            
+                            // Swap Step (only if i != j to avoid visual redundancy)
+                            if (i !== j) {
+                                const temp = a[i];
+                                a[i] = a[j];
+                                a[j] = temp;
+
+                                stepsLog.push({
+                                    array: [...a],
+                                    type: 'swap',
+                                    highlights: [i, j],
+                                    pivotIndex: high,
+                                    range: [low, high],
+                                    sortedIndices: new Set(sortedIndices),
+                                    description: `${a[i]} is smaller than ${pivot}. Swapping ${a[j]} with ${temp} to move smaller element to the left.`
+                                });
+                            } else {
+                                stepsLog.push({
+                                    array: [...a],
+                                    type: 'no_swap_needed',
+                                    highlights: [j],
+                                    pivotIndex: high,
+                                    range: [low, high],
+                                    sortedIndices: new Set(sortedIndices),
+                                    description: `${a[j]} is smaller than ${pivot}. It's already in the 'smaller' zone (left).`
+                                });
+                            }
+                        } else {
                             stepsLog.push({
-                                array: [...arr],
-                                type: 'swap',
-                                range: [low, high],
+                                array: [...a],
+                                type: 'ignore',
+                                highlights: [j],
                                 pivotIndex: high,
-                                highlights: [i, j],
-                                description: `${arr[j]} < ${pivotValue}. Swapping index ${i} and ${j}.`
+                                range: [low, high],
+                                sortedIndices: new Set(sortedIndices),
+                                description: `${a[j]} >= Pivot. No swap needed.`
                             });
-                            [arr[i], arr[j]] = [arr[j], arr[i]];
-                            // Record state after swap
-                            stepsLog[stepsLog.length-1].array = [...arr];
                         }
                     }
 
-                    // Place pivot in correct position
-                    stepsLog.push({
-                        array: [...arr],
-                        type: 'swap_pivot',
-                        range: [low, high],
-                        pivotIndex: high,
-                        highlights: [i + 1, high],
-                        description: `Placing Pivot ${pivotValue} into its correct sorted position at index ${i + 1}.`
-                    });
-                    [arr[i + 1], arr[high]] = [arr[high], arr[i + 1]];
-                    stepsLog[stepsLog.length-1].array = [...arr];
-                    
-                    // Mark pivot as sorted
-                    stepsLog.push({
-                        array: [...arr],
-                        type: 'sorted_chunk',
-                        range: [low, high],
-                        highlights: [i + 1],
-                        description: `Index ${i + 1} (${arr[i+1]}) is now in its final sorted position.`
-                    });
+                    // Swap Pivot to correct position
+                    if (i + 1 !== high) {
+                        const temp = a[i + 1];
+                        a[i + 1] = a[high];
+                        a[high] = temp;
+                        
+                        stepsLog.push({
+                            array: [...a],
+                            type: 'pivot_swap',
+                            highlights: [i + 1, high],
+                            pivotIndex: i + 1, // New pivot position
+                            range: [low, high],
+                            sortedIndices: new Set(sortedIndices),
+                            description: `End of loop. Moving Pivot ${pivot} to its correct sorted position (index ${i+1}).`
+                        });
+                    }
 
                     return i + 1;
                 };
 
-                const quickSortRecursive = (arr, low, high) => {
-                    if (low < high) {
-                        const pi = partition(arr, low, high);
-                        quickSortRecursive(arr, low, pi - 1);
-                        quickSortRecursive(arr, pi + 1, high);
-                    } else if (low === high) {
-                         // Single element is naturally sorted
-                         stepsLog.push({
-                            array: [...arr],
-                            type: 'sorted_chunk',
-                            range: [low, high],
-                            highlights: [low],
-                            description: `Single element at index ${low} is sorted.`
-                        });
-                    }
-                };
+                // Run logic
+                quickSort(arr, 0, n - 1);
 
-                quickSortRecursive(arrCopy, 0, arrCopy.length - 1);
-                
+                // Final sorted pass
                 stepsLog.push({
-                    array: [...arrCopy],
+                    array: [...arr],
                     type: 'finished',
-                    range: [0, arrCopy.length-1],
-                    description: "Sorting Complete. The array is now fully sorted."
+                    highlights: [],
+                    pivotIndex: null,
+                    range: [0, n - 1],
+                    sortedIndices: new Set(Array.from({length: n}, (_, k) => k)),
+                    description: "Quick Sort Complete. The array is fully sorted."
                 });
 
                 return stepsLog;
@@ -259,155 +311,179 @@
 
 
             // -- Render Helpers --
-            const getCurrentStep = () => steps[currentStepIndex] || { array: array, description: "Ready to sort", type: 'initial' };
+            const getCurrentStep = () => steps[currentStepIndex] || { 
+                array: array, 
+                description: "Ready to sort", 
+                type: 'initial', 
+                range: [0, arraySize-1],
+                sortedIndices: new Set() 
+            };
 
             const getBarColor = (index) => {
                 const step = getCurrentStep();
-                if (isSorted || step.type === 'finished') return COLORS.sorted;
+                
+                // 1. Finished or specifically marked sorted
+                if (isSorted || step.type === 'finished' || step.sortedIndices.has(index)) {
+                    return COLORS.sorted;
+                }
 
-                // Pivot Highlighting
-                if (step.pivotIndex === index && step.type !== 'sorted_chunk') return COLORS.pivot;
+                // 2. Pivot Logic
+                if (step.pivotIndex === index) {
+                    return COLORS.pivot;
+                }
 
-                // Operation Highlighting
+                // 3. Highlights (Compare/Swap)
                 if (step.highlights && step.highlights.includes(index)) {
                     if (step.type === 'compare') return COLORS.compare;
-                    if (step.type === 'swap' || step.type === 'swap_pivot') return COLORS.swap;
-                    if (step.type === 'sorted_chunk') return COLORS.sorted;
+                    if (step.type === 'swap' || step.type === 'pivot_swap') return COLORS.swap;
                 }
-
-                // Range Highlighting (Active Partition)
-                if (step.range && index >= step.range[0] && index <= step.range[1]) {
-                    return COLORS.activeBar; 
-                }
+                
                 return COLORS.default;
             };
 
-            const getBoxColor = (index) => {
+            // Visual Focus: Dim bars not in current partition range
+            const getOpacity = (index) => {
                 const step = getCurrentStep();
-                if (isSorted || step.type === 'finished') return 'bg-emerald-600 text-white';
-
-                if (step.pivotIndex === index && step.type !== 'sorted_chunk') return 'bg-fuchsia-600 text-white';
-
-                if (step.highlights && step.highlights.includes(index)) {
-                    if (step.type === 'compare') return 'bg-amber-600 text-white';
-                    if (step.type === 'swap' || step.type === 'swap_pivot') return 'bg-red-600 text-white';
-                    if (step.type === 'sorted_chunk') return 'bg-emerald-600 text-white';
-                }
+                if (isSorted || step.type === 'finished') return 'opacity-100';
                 
-                if (step.range && index >= step.range[0] && index <= step.range[1]) {
-                    return 'bg-indigo-500 text-white';
+                // If we are in a specific range, dim others
+                if (step.range) {
+                    const [start, end] = step.range;
+                    if (index < start || index > end) {
+                        // But keep already sorted ones reasonably visible
+                        if(step.sortedIndices.has(index)) return 'opacity-40';
+                        return 'opacity-20';
+                    }
                 }
-                return 'bg-slate-700 text-slate-300';
-            };
+                return 'opacity-100';
+            }
 
             const currentData = steps[currentStepIndex]?.array || array;
             const currentDesc = steps[currentStepIndex]?.description || "Press Play to start sorting.";
+            const currentPivotIndex = steps[currentStepIndex]?.pivotIndex;
 
             return (
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
-                /* Top Bar */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4" },
+                /* Top Bar Wrapper */
+                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-6" },
                     
-                    /* Title */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                    React.createElement(Zap, { size: 28, className: "text-fuchsia-400" }),
-                    React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-fuchsia-400" }, "Quick Sort")
+                    /* Title (Standalone Left) */
+                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                        React.createElement(Settings, { size: 32, className: "text-indigo-400" }),
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Quick Sort")
                     ),
 
-                    /* Global Controls */
-                    React.createElement("div", { className: "flex flex-grow items-center justify-center gap-4 flex-wrap" },
-                    React.createElement("div", { className: "flex items-center gap-2" },
-                        React.createElement("span", { className: "text-xs text-slate-400" }, "SIZE"),
-                        React.createElement("input", {
-                        type: "range", min: "5", max: "25", step: "1",
-                        value: arraySize,
-                        onChange: (e) => setArraySize(Number(e.target.value)),
-                        disabled: isPlaying,
-                        className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-sm text-slate-300" }, arraySize)
-                    ),
+                    /* Controls (Pill-shaped Container Right) */
+                    React.createElement("div", { className: "flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                        
+                        /* Size Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
+                            React.createElement("input", {
+                                type: "range", min: "5", max: "25", step: "1",
+                                value: arraySize,
+                                onChange: (e) => setArraySize(Number(e.target.value)),
+                                disabled: isPlaying,
+                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                            }),
+                            React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
+                        ),
 
-                    React.createElement("div", { className: "flex items-center gap-2" },
-                        React.createElement("span", { className: "text-xs text-slate-400" }, "SPEED"),
-                        React.createElement("input", {
-                        type: "range", min: "100", max: "1900", step: "100",
-                        value: animationSpeed,
-                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                        className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                        })
-                    ),
+                        /* Speed Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
+                            React.createElement("input", {
+                                type: "range", min: "100", max: "1900", step: "100",
+                                value: animationSpeed,
+                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                            })
+                        ),
 
-                    React.createElement("div", { className: "flex items-center gap-2 ml-4" },
-                        React.createElement("button", { onClick: reset, className: "p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-all", title: "Reset" },
-                        React.createElement(RotateCcw, { size: 20 })
-                        ),
-                        React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-1 text-blue-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
-                        React.createElement(SkipBack, { size: 20 })
-                        ),
-                        React.createElement("button", { 
-                        onClick: togglePlay, 
-                        className: "p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-lg shadow-blue-900/50 transition-all hover:scale-105 active:scale-95"
-                        },
-                        isPlaying 
-                            ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
-                            : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-1" })
-                        ),
-                        React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-1 text-blue-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
-                        React.createElement(SkipForward, { size: 20 })
+                        /* Separator */
+                        React.createElement("div", { className: "h-8 w-px bg-slate-700 hidden sm:block mx-2" }),
+
+                        /* Playback Buttons */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors", title: "Reset" },
+                                React.createElement(RotateCcw, { size: 18 })
+                            ),
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipBack, { size: 18 })
+                            ),
+                            React.createElement("button", { 
+                                onClick: togglePlay, 
+                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                            },
+                                isPlaying 
+                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
+                            ),
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipForward, { size: 18 })
+                            )
                         )
-                    )
-                    ),
-
-                    /* Legend */
-                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-4 gap-y-2 text-xs text-slate-300 md:ml-auto" },
-                    React.createElement("div", { className: "flex items-center gap-1" },
-                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.pivot}` }), " Pivot"
-                    ),
-                    React.createElement("div", { className: "flex items-center gap-1" },
-                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.compare}` }), " Compare"
-                    ),
-                    React.createElement("div", { className: "flex items-center gap-1" },
-                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.swap}` }), " Swap"
-                    ),
-                    React.createElement("div", { className: "flex items-center gap-1" },
-                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.sorted}` }), " Sorted"
-                    )
                     )
                 ),
 
-                /* Main Content */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
-                    
-                    /* Description Box */
-                    React.createElement("div", { className: "min-h-[70px] bg-slate-700/50 rounded-lg border border-slate-600 p-4 flex items-center justify-center shadow-inner" },
+                /* Description Box */
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6 flex items-center justify-center shadow-lg" },
                     React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                ),
+
+                /* Main Content */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-4" },
+                    
+                    /* Legend (Top Right) */
+                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 w-full" },
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.pivot}` }), "Pivot"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.compare}` }), "Scanner"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.swap}` }), "Swap"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.sorted}` }), "Sorted/Placed"
+                        )
                     ),
 
+                    /* Divider after Legend */
+                    React.createElement("div", { className: "w-full h-px bg-slate-700/50 my-1" }),
+
                     /* Array Representation */
-                    React.createElement("div", { className: "flex flex-col items-center w-full" },
-                    React.createElement("h3", { className: "text-sm font-semibold text-slate-400 mb-2" }, "ARRAY REPRESENTATION"),
+                    React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
+                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Partition View"),
                     React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 px-4" },
                         currentData.map((val, idx) => 
                         React.createElement("div", { 
                             key: idx, 
-                            className: `w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 ${getBoxColor(idx)} border border-slate-600`
+                            className: `relative w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 border border-slate-600
+                            ${idx === currentPivotIndex ? 'border-indigo-400 border-2 -translate-y-2 shadow-indigo-500/50 shadow-md bg-indigo-900 text-indigo-100' : 'bg-slate-800 text-slate-300'}
+                            ${getOpacity(idx)}`
                         },
                             React.createElement("span", null, val),
-                            React.createElement("span", { className: "text-[9px] font-normal text-slate-400 leading-none" }, idx)
+                            React.createElement("span", { className: "text-[9px] font-normal text-slate-500 leading-none mt-1" }, idx),
+                            
+                            /* Render little arrow if this is the pivot */
+                            idx === currentPivotIndex && React.createElement("div", { className: "absolute -bottom-5 text-indigo-400 animate-bounce" }, 
+                                React.createElement(Fingerprint, { size: 16 })
+                            )
                         )
                         )
                     )
                     ),
 
                     /* Bar Chart */
-                    React.createElement("div", { className: "relative w-full h-64 sm:h-80 bg-slate-900 rounded-lg p-4 flex items-end justify-center overflow-hidden" },
-                    React.createElement("div", { className: "absolute inset-0 opacity-10 pointer-events-none", style: { backgroundImage: 'radial-gradient(#64748b 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                    React.createElement("div", { className: "relative w-full h-64 sm:h-80 bg-slate-900/50 rounded-lg p-4 flex items-end justify-center overflow-hidden mt-4 border border-slate-800" },
+                    React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
                     React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
                         currentData.map((val, idx) => {
                         const heightPct = (val / 60) * 100;
-                        return React.createElement("div", { key: idx, className: "h-full flex flex-col items-center justify-end w-full max-w-[3rem] group" },
+                        return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group ${getOpacity(idx)}` },
                             React.createElement("span", { className: "text-[10px] text-slate-200 mb-1 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
                             React.createElement("div", { 
                             className: `w-full rounded-t-md transition-all duration-200 ease-in-out ${getBarColor(idx)}`,
@@ -419,15 +495,15 @@
                     ),
 
                     /* Footer */
-                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 mt-2" },
                     React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
                     React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full" },
                         React.createElement("div", { 
-                        className: "h-full bg-blue-500 rounded-full transition-all duration-100",
+                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
                         style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
                         })
                     ),
-                    React.createElement("span", null, isSorted ? "Sorted" : "Sorting...")
+                    React.createElement("span", null, isSorted ? "Sorted" : "Partitioning...")
                     )
                 )
                 )

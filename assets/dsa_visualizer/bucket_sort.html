@@ -36,7 +36,6 @@
             background: #64748b; 
         }
         
-        /* Animation for description text */
         @keyframes fade-in {
             from { opacity: 0; transform: translateY(5px); }
             to { opacity: 1; transform: translateY(0); }
@@ -44,12 +43,7 @@
         .animate-fade-in {
             animation: fade-in 0.3s ease-out forwards;
         }
-
-        /* Smooth transitions for height and color changes */
-        .bar-transition {
-            transition: height 0.3s ease-in-out, background-color 0.3s ease, opacity 0.3s ease;
-        }
-
+        
         body {
             background-color: #0f172a; /* Slate 900 */
         }
@@ -61,17 +55,16 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Settings, Box } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Settings, ArrowDown, ArrowUp, LayoutGrid } from 'lucide-react';
 
         const BucketSortVisualizer = () => {
             // -- State --
-            const [arraySize, setArraySize] = useState(20);
-            const [animationSpeed, setAnimationSpeed] = useState(1000); 
-            const [array, setArray] = useState([]);
+            const [arraySize, setArraySize] = useState(15);
+            const [animationSpeed, setAnimationSpeed] = useState(800); 
             const [steps, setSteps] = useState([]);
             const [currentStepIndex, setCurrentStepIndex] = useState(0);
             const [isPlaying, setIsPlaying] = useState(false);
-            const [isSorted, setIsSorted] = useState(false);
+            const [isFinished, setIsFinished] = useState(false);
             
             // Refs
             const timerRef = useRef(null);
@@ -79,155 +72,108 @@
             // -- Constants --
             const BUCKET_COUNT = 5;
             const MAX_VAL = 50;
-            
+            const BUCKET_SIZE = 10; // MAX_VAL / BUCKET_COUNT
+
             // -- Colors --
             const COLORS = {
                 default: 'bg-slate-600',
-                moving: 'bg-amber-500',
-                inBucket: 'bg-indigo-500',
-                sortingBucket: 'bg-purple-500',
+                active: 'bg-indigo-500',
+                bucket: 'bg-slate-800',
+                bucketActive: 'bg-indigo-900/50',
+                sorting: 'bg-amber-500',
                 sorted: 'bg-emerald-500',
-                ghost: 'bg-slate-800 border-slate-700 text-slate-700', // For items moved out of main array
+                ghost: 'bg-slate-700/30 border-slate-700/50 text-slate-700', // For empty spots in array
             };
 
             // -- Algorithm Logic --
-            const generateArray = useCallback((size) => {
-                // Generate numbers between 1 and MAX_VAL
-                return Array.from({ length: size }, () => Math.floor(Math.random() * MAX_VAL) + 1);
+            const generateRandomArray = useCallback((size) => {
+                // Generate numbers between 1 and 49 to fit nicely in 0-50 ranges
+                return Array.from({ length: size }, () => Math.floor(Math.random() * (MAX_VAL - 1)) + 1);
             }, []);
 
             const generateSteps = (initialArray) => {
                 const stepsLog = [];
-                const arrCopy = [...initialArray];
-                // Initialize empty buckets logic
-                // We will store 'buckets' in the step state as an array of arrays
-                let bucketsState = Array.from({ length: BUCKET_COUNT }, () => []);
+                // State tracking
+                let currentArray = [...initialArray];
+                // Create 5 empty buckets
+                let buckets = Array.from({ length: BUCKET_COUNT }, () => []);
                 
-                // Helper to record a step
-                const recordStep = (currentArr, currentBuckets, type, desc, highlights = [], activeBucketIdx = -1) => {
+                // Helper to push state
+                const pushStep = (type, desc, activeIdx = null, activeBucketIdx = null, highlightIndices = []) => {
                     stepsLog.push({
-                        array: JSON.parse(JSON.stringify(currentArr)), // Deep copy
-                        buckets: JSON.parse(JSON.stringify(currentBuckets)), // Deep copy
+                        array: [...currentArray], // Copy array state
+                        buckets: buckets.map(b => [...b]), // Deep copy buckets
                         type,
                         description: desc,
-                        highlights, // Indices in main array or specific bucket items
-                        activeBucketIdx
+                        activeIndices: activeIdx !== null ? [activeIdx] : highlightIndices,
+                        activeBucketIndex: activeBucketIdx
                     });
                 };
 
                 // 1. Initial State
-                recordStep(arrCopy, bucketsState, 'initial', "Initial array generated. Ready to distribute into buckets.");
+                pushStep('initial', "Initial Array. We will distribute these numbers into 5 buckets based on their value.");
 
                 // 2. Distribution Phase
-                // Create a "ghosted" version of the array to show where items went
-                const ghostArray = [...arrCopy]; 
-                // We'll use a special value (e.g., null or -1) to denote "moved to bucket" in the visualization of the main array
-
-                for (let i = 0; i < arrCopy.length; i++) {
-                    const val = arrCopy[i];
-                    const bucketIndex = Math.floor((val - 1) / (MAX_VAL / BUCKET_COUNT));
+                for (let i = 0; i < currentArray.length; i++) {
+                    const val = currentArray[i];
+                    const bucketIndex = Math.floor(val / BUCKET_SIZE);
                     
-                    // Highlight before moving
-                    recordStep(
-                        ghostArray, 
-                        bucketsState, 
-                        'compare', 
-                        `Processing value ${val}. It belongs in Bucket ${bucketIndex + 1} (Range: ${bucketIndex * 10 + 1}-${(bucketIndex + 1) * 10}).`,
-                        [i]
-                    );
+                    // Step: Highlight element to move
+                    pushStep('distribute_select', `Selecting ${val}. It belongs in Bucket ${bucketIndex + 1} (Range ${bucketIndex * 10}-${(bucketIndex * 10) + 9}).`, i, null);
 
-                    // Move to bucket
-                    bucketsState[bucketIndex].push(val);
-                    ghostArray[i] = null; // Mark as moved in main view
+                    // Step: Move to bucket
+                    // Visually remove from array (replace with null) and add to bucket
+                    currentArray[i] = null; 
+                    buckets[bucketIndex].push(val);
                     
-                    recordStep(
-                        ghostArray,
-                        bucketsState,
-                        'distribute',
-                        `Moved ${val} to Bucket ${bucketIndex + 1}.`,
-                        [i],
-                        bucketIndex
-                    );
+                    pushStep('distribute_move', `Moved ${val} to Bucket ${bucketIndex + 1}.`, i, bucketIndex);
                 }
 
-                recordStep(ghostArray, bucketsState, 'distribute_complete', "All elements distributed into buckets based on their value ranges.");
+                pushStep('distribute_done', "Distribution complete. Now we sort each bucket individually.");
 
-                // 3. Sorting Phase (Sort individual buckets)
+                // 3. Sorting Buckets Phase
                 for (let b = 0; b < BUCKET_COUNT; b++) {
-                    if (bucketsState[b].length > 0) {
-                        recordStep(
-                            ghostArray,
-                            bucketsState,
-                            'bucket_focus',
-                            `Focusing on Bucket ${b + 1} to sort its contents.`,
-                            [],
-                            b
-                        );
-
-                        // Simple Insertion Sort for visualization within the bucket
-                        let bucketArr = bucketsState[b];
-                        for (let i = 1; i < bucketArr.length; i++) {
-                            let key = bucketArr[i];
-                            let j = i - 1;
-                            while (j >= 0 && bucketArr[j] > key) {
-                                bucketArr[j + 1] = bucketArr[j];
-                                j = j - 1;
-                            }
-                            bucketArr[j + 1] = key;
-                            
-                            // Update the state after a swap (or series of shifts)
-                            recordStep(
-                                ghostArray,
-                                bucketsState,
-                                'sort_bucket',
-                                `Sorting Bucket ${b + 1}...`,
-                                [],
-                                b
-                            );
-                        }
-                        bucketsState[b] = bucketArr; // Ensure state is updated
+                    if (buckets[b].length > 0) {
+                        pushStep('sort_bucket_start', `Sorting Bucket ${b + 1}...`, null, b);
                         
-                        recordStep(
-                            ghostArray,
-                            bucketsState,
-                            'bucket_sorted',
-                            `Bucket ${b + 1} is now sorted.`,
-                            [],
-                            b
-                        );
+                        // Simple sort for the bucket logic (we could visualize insertion sort here, but let's keep it high level)
+                        buckets[b].sort((a, b) => a - b);
+                        
+                        pushStep('sort_bucket_end', `Bucket ${b + 1} is now sorted.`, null, b);
                     }
                 }
+
+                pushStep('gather_start', "All buckets sorted. Now gathering elements back into the main array.");
 
                 // 4. Gathering Phase
-                let rebuildIndex = 0;
+                let arrayInsertIndex = 0;
                 for (let b = 0; b < BUCKET_COUNT; b++) {
-                    const bucket = bucketsState[b];
-                    // Copy bucket so we can shift items out one by one for animation
-                    let tempBucket = [...bucket];
+                    const bucket = buckets[b];
+                    // We iterate through a copy to avoid modifying the bucket while looping, 
+                    // but we need to modify the visual state 'buckets'
+                    const count = bucket.length;
                     
-                    while (tempBucket.length > 0) {
-                        const val = tempBucket.shift(); // Take from front (already sorted)
+                    if (count > 0) {
+                        pushStep('gather_bucket_select', `Gathering elements from Bucket ${b + 1}.`, null, b);
+                    }
+
+                    for (let k = 0; k < count; k++) {
+                        const val = bucket[0]; // Take first element
                         
-                        // Update the main bucket state for the visual to show it removed
-                        bucketsState[b] = [...tempBucket];
+                        // Remove from bucket in state
+                        buckets[b] = buckets[b].slice(1); // Remove first element
                         
-                        // Place back into main array
-                        ghostArray[rebuildIndex] = val;
+                        // Add to main array
+                        currentArray[arrayInsertIndex] = val;
+
+                        pushStep('gather_move', `Moved ${val} back to the main array at index ${arrayInsertIndex}.`, arrayInsertIndex, b);
                         
-                        recordStep(
-                            ghostArray,
-                            bucketsState,
-                            'gather',
-                            `Gathering ${val} from Bucket ${b + 1} back to position ${rebuildIndex}.`,
-                            [rebuildIndex],
-                            b
-                        );
-                        
-                        rebuildIndex++;
+                        arrayInsertIndex++;
                     }
                 }
 
-                recordStep(ghostArray, bucketsState, 'finished', "Sorting Complete! All buckets have been gathered.");
+                pushStep('finished', "Sorting Complete.", null, null);
+
                 return stepsLog;
             };
 
@@ -238,36 +184,33 @@
 
             const reset = () => {
                 setIsPlaying(false);
-                setIsSorted(false);
+                setIsFinished(false);
                 setCurrentStepIndex(0);
-                const newArr = generateArray(arraySize);
-                setArray(newArr);
+                const newArr = generateRandomArray(arraySize);
                 const generatedSteps = generateSteps(newArr);
                 setSteps(generatedSteps);
             };
 
             useEffect(() => {
                 if (isPlaying) {
-                    // Dynamic speed calculation
-                    const delay = Math.max(50, 2000 - animationSpeed);
-                    
                     timerRef.current = setInterval(() => {
                         setCurrentStepIndex((prev) => {
                             if (prev < steps.length - 1) {
                                 return prev + 1;
                             } else {
                                 setIsPlaying(false);
-                                setIsSorted(true);
+                                setIsFinished(true);
                                 clearInterval(timerRef.current);
                                 return prev;
                             }
                         });
-                    }, delay);
+                    }, 2000 - animationSpeed);
                 } else {
                     clearInterval(timerRef.current);
                 }
                 return () => clearInterval(timerRef.current);
             }, [isPlaying, steps.length, animationSpeed]);
+
 
             // -- Controls --
             const handleNext = () => {
@@ -275,7 +218,7 @@
                     setCurrentStepIndex(prev => prev + 1);
                     setIsPlaying(false);
                 } else {
-                    setIsSorted(true);
+                    setIsFinished(true);
                 }
             };
 
@@ -283,7 +226,7 @@
                 if (currentStepIndex > 0) {
                     setCurrentStepIndex(prev => prev - 1);
                     setIsPlaying(false);
-                    setIsSorted(false);
+                    setIsFinished(false);
                 }
             };
 
@@ -297,208 +240,204 @@
             };
 
             // -- Render Helpers --
-            const getCurrentData = () => {
-                if (steps.length === 0) return { array: array, buckets: Array.from({length: BUCKET_COUNT}, ()=>[]), description: "Ready", type: 'initial' };
-                return steps[currentStepIndex];
-            };
+            const getCurrentStep = () => steps[currentStepIndex] || { array: [], buckets: [[],[],[],[],[]], type: 'initial', description: 'Loading...' };
+            
+            const step = getCurrentStep();
+            const currentArray = step.array || [];
+            const currentBuckets = step.buckets || [];
+            const currentDesc = step.description || "";
 
-            const currentStep = getCurrentData();
-            const currentArray = currentStep.array || array;
-            const currentBuckets = currentStep.buckets || [];
-            const currentDesc = currentStep.description;
+            // Determine color for Array Bar
+            const getArrayItemColor = (val, idx) => {
+                if (val === null) return COLORS.ghost;
+                if (step.type === 'finished') return COLORS.sorted;
+                if (step.type === 'distribute_select' && step.activeIndices.includes(idx)) return COLORS.active;
+                if (step.type === 'gather_move' && step.activeIndices.includes(idx)) return COLORS.sorted;
+                
+                // If we are in gather phase and index is less than current insertion, it's sorted
+                if (step.type.startsWith('gather') && idx < step.activeIndices[0]) return COLORS.sorted;
+                // If we passed gather phase for this index
+                 if (step.type === 'gather_move' && idx < step.activeIndices[0]) return COLORS.sorted;
 
-            // Color logic for Main Array Bars
-            const getBarColor = (val, index) => {
-                if (val === null) return 'opacity-0'; // Ghosted
-                if (currentStep.type === 'finished') return COLORS.sorted;
-                if (currentStep.type === 'gather' && currentStep.highlights.includes(index)) return COLORS.sorted;
-                if (currentStep.type === 'compare' && currentStep.highlights.includes(index)) return COLORS.moving;
                 return COLORS.default;
             };
 
-            // Color logic for Main Array Boxes
-            const getBoxColor = (val, index) => {
-                if (val === null) return COLORS.ghost;
-                if (currentStep.type === 'finished') return 'bg-emerald-600 text-white border-emerald-500';
-                if (currentStep.type === 'gather' && currentStep.highlights.includes(index)) return 'bg-emerald-600 text-white border-emerald-500';
-                if (currentStep.type === 'compare' && currentStep.highlights.includes(index)) return 'bg-amber-500 text-white border-amber-400 scale-110 shadow-lg z-10';
-                return 'bg-slate-700 text-slate-300 border-slate-600';
-            };
-
             return (
-                React.createElement("div", { className: "flex flex-col items-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-6" },
+                React.createElement("div", { className: "flex flex-col items-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
-                /* Top Bar */
-                React.createElement("div", { className: "w-full max-w-6xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 mb-6 flex flex-col md:flex-row items-center justify-between gap-4" },
+                /* Top Bar Wrapper */
+                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-6" },
                     
                     /* Title */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        React.createElement(Box, { size: 28, className: "text-indigo-400" }),
-                        React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-indigo-400" }, "Bucket Sort")
+                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                        React.createElement(LayoutGrid, { size: 32, className: "text-indigo-400" }),
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Bucket Sort")
                     ),
 
-                    /* Global Controls */
-                    React.createElement("div", { className: "flex flex-grow items-center justify-center gap-4 flex-wrap" },
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400" }, "SIZE"),
+                    /* Controls */
+                    React.createElement("div", { className: "flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                        
+                        /* Size Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
                             React.createElement("input", {
-                                type: "range", min: "10", max: "30", step: "1",
+                                type: "range", min: "5", max: "25", step: "1",
                                 value: arraySize,
                                 onChange: (e) => setArraySize(Number(e.target.value)),
                                 disabled: isPlaying,
-                                className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
                             }),
-                            React.createElement("span", { className: "text-sm text-slate-300" }, arraySize)
+                            React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
                         ),
 
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400" }, "SPEED"),
+                        /* Speed Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
                             React.createElement("input", {
                                 type: "range", min: "100", max: "1900", step: "100",
                                 value: animationSpeed,
                                 onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-24 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                             })
                         ),
 
-                        React.createElement("div", { className: "flex items-center gap-2 ml-4" },
-                            React.createElement("button", { onClick: reset, className: "p-1 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-all", title: "Reset" },
-                                React.createElement(RotateCcw, { size: 20 })
+                        /* Separator */
+                        React.createElement("div", { className: "h-8 w-px bg-slate-700 hidden sm:block mx-2" }),
+
+                        /* Playback Buttons */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors", title: "Reset" },
+                                React.createElement(RotateCcw, { size: 18 })
                             ),
-                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-1 text-indigo-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
-                                React.createElement(SkipBack, { size: 20 })
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipBack, { size: 18 })
                             ),
                             React.createElement("button", { 
                                 onClick: togglePlay, 
-                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95"
+                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
                             },
                                 isPlaying 
                                     ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
-                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-1" })
+                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
                             ),
-                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-1 text-indigo-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-all" },
-                                React.createElement(SkipForward, { size: 20 })
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipForward, { size: 18 })
                             )
-                        )
-                    ),
-
-                    /* Legend */
-                    React.createElement("div", { className: "hidden lg:flex flex-wrap justify-end gap-x-4 gap-y-2 text-xs text-slate-300" },
-                        React.createElement("div", { className: "flex items-center gap-1" },
-                            React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.moving}` }), " Processing"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-1" },
-                            React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.inBucket}` }), " In Bucket"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-1" },
-                            React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.sorted}` }), " Sorted"
                         )
                     )
                 ),
 
-                /* Main Content Area */
-                React.createElement("div", { className: "w-full max-w-6xl flex flex-col gap-4" },
+                /* Description Box */
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6 flex items-center justify-center shadow-lg" },
+                    React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                ),
+
+                /* Unified Main Content Container */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
                     
-                    /* Description Box */
-                    React.createElement("div", { className: "min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-sm" },
-                        React.createElement("p", { className: "text-md text-indigo-200 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
-                    ),
-
-                    /* Visualization Container */
-                    React.createElement("div", { className: "bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-8" },
-                        
-                        /* 1. Main Array Representation (Source/Destination) */
-                        React.createElement("div", { className: "flex flex-col items-center w-full" },
-                            React.createElement("div", { className: "flex justify-between w-full mb-2 px-2" },
-                                React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 uppercase" }, "Main Array"),
-                                React.createElement("span", { className: "text-xs text-slate-500" }, isSorted ? "Result" : "Source")
-                            ),
-                            
-                            /* Boxes Row */
-                            React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 min-h-[50px]" },
-                                currentArray.map((val, idx) => 
-                                    React.createElement("div", { 
-                                        key: idx, 
-                                        className: `flex-1 max-w-[2.5rem] aspect-square flex items-center justify-center rounded md:rounded-md font-bold text-sm transition-all duration-300 border ${getBoxColor(val, idx)}`
-                                    },
-                                        val !== null ? val : ""
-                                    )
-                                )
-                            ),
-
-                            /* Bars Row (Subtle reflection below boxes) */
-                            React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 h-16 mt-1 items-start opacity-50" },
-                                currentArray.map((val, idx) => {
-                                    if (val === null) return React.createElement("div", { key: idx, className: "flex-1 max-w-[2.5rem]" });
-                                    const heightPct = (val / MAX_VAL) * 100;
-                                    return React.createElement("div", { 
-                                        key: idx, 
-                                        className: `flex-1 max-w-[2.5rem] rounded-b-md ${getBarColor(val, idx)} bar-transition`,
-                                        style: { height: `${heightPct}%` }
-                                    });
-                                })
-                            )
+                    /* Legend (Top Right) */
+                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 w-full mb-2" },
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.active}` }), "Active"
                         ),
-
-                        /* Divider Arrow */
-                        React.createElement("div", { className: "flex justify-center text-slate-600" },
-                            React.createElement("div", { className: "h-8 w-px bg-slate-600" })
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.sorting}` }), "Sorting"
                         ),
-
-                        /* 2. Buckets Representation */
-                        React.createElement("div", { className: "flex flex-col items-center w-full" },
-                            React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 uppercase mb-4" }, "Buckets (Distribution)"),
-                            
-                            React.createElement("div", { className: "grid grid-cols-5 gap-4 w-full" },
-                                Array.from({ length: BUCKET_COUNT }).map((_, bIdx) => {
-                                    const bucketItems = currentBuckets[bIdx] || [];
-                                    const rangeStart = bIdx * 10 + 1;
-                                    const rangeEnd = (bIdx + 1) * 10;
-                                    const isActive = currentStep.activeBucketIdx === bIdx;
-                                    const isSortedStep = currentStep.type === 'bucket_sorted' && isActive;
-
-                                    return React.createElement("div", { 
-                                        key: bIdx, 
-                                        className: `flex flex-col h-64 rounded-lg border-2 transition-colors duration-300 ${isActive ? 'border-indigo-500 bg-slate-700/30' : 'border-slate-700 bg-slate-900/30'}`
-                                    },
-                                        /* Bucket Header */
-                                        React.createElement("div", { className: `p-2 text-center border-b border-slate-700 ${isActive ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-500'}` },
-                                            React.createElement("span", { className: "block text-xs uppercase font-bold" }, `Bucket ${bIdx + 1}`),
-                                            React.createElement("span", { className: "text-[10px]" }, `${rangeStart}-${rangeEnd}`)
-                                        ),
-
-                                        /* Bucket Contents (Stacking upwards or list) */
-                                        React.createElement("div", { className: "flex-1 p-2 overflow-y-auto relative" },
-                                            React.createElement("div", { className: "flex flex-col gap-1 min-h-full justify-end" },
-                                                bucketItems.map((val, iIdx) => ({ val, iIdx })).reverse().map(({ val, iIdx }) => 
-                                                    React.createElement("div", { 
-                                                        key: iIdx, 
-                                                        className: `w-full text-center py-1 rounded text-sm font-medium transition-all duration-300 animate-fade-in
-                                                            ${isSortedStep ? 'bg-emerald-600 text-white' : 
-                                                            isActive && currentStep.type === 'sort_bucket' ? 'bg-purple-500 text-white' : 
-                                                            'bg-slate-600 text-slate-200'}`
-                                                    }, val)
-                                                )
-                                            ),
-                                            /* Empty State Hint */
-                                            bucketItems.length === 0 && React.createElement("div", { className: "absolute inset-0 flex items-center justify-center text-slate-700 text-xs italic pointer-events-none" }, "Empty")
-                                        )
-                                    );
-                                })
-                            )
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.sorted}` }), "Sorted"
                         )
                     ),
 
-                    /* Footer Progress */
-                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 px-2" },
-                        React.createElement("span", null, `STEP ${currentStepIndex} / ${steps.length - 1}`),
-                        React.createElement("div", { className: "w-1/3 h-1 bg-slate-700 rounded-full overflow-hidden" },
+                    /* Divider */
+                    React.createElement("div", { className: "w-full h-px bg-slate-700/50 mb-1" }),
+
+                    /* TOP: The Array (Unified) */
+                    React.createElement("div", { className: "w-full flex flex-col items-center min-h-[120px]" },
+                        React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-4 uppercase w-full text-left" }, "Main Array"),
+                        
+                        React.createElement("div", { className: "flex flex-wrap justify-center gap-2 w-full" },
+                            currentArray.map((val, idx) => {
+                                const isGhost = val === null;
+                                return React.createElement("div", { 
+                                    key: idx, 
+                                    className: `relative w-10 h-14 sm:w-12 sm:h-16 flex items-center justify-center rounded-md font-bold text-lg transition-all duration-300 border-2 
+                                    ${isGhost ? COLORS.ghost : (getArrayItemColor(val, idx) + ' text-white border-slate-500/30 shadow-lg')}`
+                                },
+                                    !isGhost && React.createElement("span", null, val),
+                                    React.createElement("span", { className: "absolute -bottom-5 text-[10px] font-mono text-slate-600" }, idx),
+                                    
+                                    /* Active Arrow Indicator */
+                                    (step.type === 'distribute_select' && step.activeIndices.includes(idx)) && 
+                                        React.createElement("div", { className: "absolute -top-6 text-indigo-400 animate-bounce" }, React.createElement(ArrowDown, { size: 16 })),
+                                        
+                                    (step.type === 'gather_move' && step.activeIndices.includes(idx)) && 
+                                        React.createElement("div", { className: "absolute -bottom-8 text-emerald-400 animate-bounce" }, React.createElement(ArrowUp, { size: 16 }))
+                                )
+                            })
+                        )
+                    ),
+
+                    /* MIDDLE: Flow Arrows (Visual Decoration) */
+                    React.createElement("div", { className: "flex justify-center opacity-20" },
+                        React.createElement(ArrowDown, { size: 32, className: "text-slate-400" })
+                    ),
+
+                    /* BOTTOM: The Buckets */
+                    React.createElement("div", { className: "w-full grid grid-cols-2 md:grid-cols-5 gap-4" },
+                        currentBuckets.map((bucketItems, bIdx) => {
+                            const isActiveBucket = step.activeBucketIndex === bIdx;
+                            const isSorting = isActiveBucket && step.type.startsWith('sort');
+                            
+                            let borderColor = 'border-slate-700';
+                            let bgColor = 'bg-slate-900/30'; // Darker inner background for buckets
+                            
+                            if (isActiveBucket) {
+                                borderColor = 'border-indigo-500';
+                                if (isSorting) {
+                                    borderColor = 'border-amber-500';
+                                    bgColor = 'bg-amber-900/10';
+                                }
+                            }
+
+                            return React.createElement("div", { 
+                                key: bIdx, 
+                                className: `relative flex flex-col h-64 rounded-xl border-2 transition-all duration-300 overflow-hidden ${borderColor} ${bgColor}`
+                            },
+                                /* Bucket Header */
+                                React.createElement("div", { className: "w-full p-2 bg-slate-900/80 text-center border-b border-slate-700/50 flex flex-col items-center justify-center" },
+                                    React.createElement("span", { className: "text-xs font-bold text-slate-400 uppercase" }, `Bucket ${bIdx + 1}`),
+                                    React.createElement("span", { className: "text-[10px] text-slate-500" }, `${bIdx * 10} - ${(bIdx * 10) + 9}`)
+                                ),
+                                
+                                /* Bucket Content Area */
+                                React.createElement("div", { className: "flex-1 p-2 flex flex-col-reverse gap-1 items-center justify-start overflow-y-auto" },
+                                    bucketItems.map((val, itemIdx) => (
+                                        React.createElement("div", { 
+                                            key: itemIdx,
+                                            className: `w-full py-1 text-center rounded text-sm font-bold shadow-sm transition-all duration-300 animate-fade-in
+                                            ${isSorting ? COLORS.sorting : COLORS.active} text-white`
+                                        }, val)
+                                    ))
+                                ),
+
+                                /* Bucket Status Overlay (Sorting...) */
+                                isSorting && React.createElement("div", { className: "absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-[1px]" },
+                                    React.createElement("span", { className: "bg-amber-500 text-amber-900 px-3 py-1 rounded-full text-xs font-bold animate-pulse" }, "Sorting...")
+                                )
+                            )
+                        })
+                    ),
+
+                    /* Footer */
+                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                        React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                        React.createElement("div", { className: "w-24 sm:w-40 h-1 bg-slate-700 rounded-full overflow-hidden" },
                             React.createElement("div", { 
-                                className: "h-full bg-indigo-500 rounded-full transition-all duration-200",
-                                style: { width: `${steps.length > 1 ? (currentStepIndex / (steps.length - 1)) * 100 : 0}%` }
+                                className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
                             })
                         ),
-                        React.createElement("span", null, isSorted ? "Complete" : "In Progress")
+                        React.createElement("span", null, isFinished ? "Done" : step.type.split('_')[0].toUpperCase())
                     )
                 )
                 )
