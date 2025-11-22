@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linear Search Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        /* Animation for description text */
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Search, Target, ArrowDown } from 'lucide-react';
+
+        const LinearSearchVisualizer = () => {
+            // -- State --
+            const [arraySize, setArraySize] = useState(15);
+            const [animationSpeed, setAnimationSpeed] = useState(500); 
+            const [array, setArray] = useState([]);
+            const [targetValue, setTargetValue] = useState(null);
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [isFound, setIsFound] = useState(false);
+            
+            // Refs
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-600',
+                checking: 'bg-amber-500', // Currently being inspected
+                checked: 'bg-slate-700',   // Visited and not found
+                found: 'bg-emerald-500',   // The match
+                target: 'text-indigo-400', // Color for the target UI
+            };
+
+            // -- Algorithm Logic --
+            const generateArray = useCallback((size) => {
+                return Array.from({ length: size }, () => Math.floor(Math.random() * 50) + 1);
+            }, []);
+
+            const generateSteps = (arr, target) => {
+                const stepsLog = [];
+                const n = arr.length;
+
+                // Step 0: Initial state
+                stepsLog.push({
+                    type: 'initial',
+                    currentIndex: -1,
+                    foundIndex: null,
+                    checkedIndices: [],
+                    description: `Initial Array. We are searching for the target value: ${target}.`
+                });
+
+                let found = false;
+
+                // Linear Search Logic
+                for (let i = 0; i < n; i++) {
+                    // Step: Check current index
+                    stepsLog.push({
+                        type: 'check',
+                        currentIndex: i,
+                        foundIndex: null,
+                        checkedIndices: Array.from({length: i}, (_, k) => k), // 0 to i-1 are checked
+                        description: `Checking index ${i}: Is ${arr[i]} equal to target ${target}?`
+                    });
+
+                    if (arr[i] === target) {
+                        // Step: Found
+                        stepsLog.push({
+                            type: 'found',
+                            currentIndex: i,
+                            foundIndex: i,
+                            checkedIndices: Array.from({length: i}, (_, k) => k),
+                            description: `Match found! Element ${arr[i]} at index ${i} matches the target.`
+                        });
+                        found = true;
+                        break; 
+                    } else {
+                        // Step: Not Match (move to next)
+                        // Note: Visually this is often instantaneous in linear search, but useful for clarity
+                        stepsLog.push({
+                            type: 'miss',
+                            currentIndex: i,
+                            foundIndex: null,
+                            checkedIndices: Array.from({length: i + 1}, (_, k) => k), // 0 to i are now checked
+                            description: `${arr[i]} is not ${target}. Moving to next element.`
+                        });
+                    }
+                }
+
+                if (!found) {
+                    stepsLog.push({
+                        type: 'finished_not_found',
+                        currentIndex: -1,
+                        foundIndex: null,
+                        checkedIndices: Array.from({length: n}, (_, k) => k),
+                        description: `Reached end of array. Target ${target} was not found.`
+                    });
+                } else {
+                    // Final confirmation step
+                    stepsLog.push({
+                        type: 'finished_found',
+                        currentIndex: null,
+                        foundIndex: stepsLog[stepsLog.length - 1].foundIndex,
+                        checkedIndices: stepsLog[stepsLog.length - 1].checkedIndices,
+                        description: `Search Complete. Target found.`
+                    });
+                }
+
+                return stepsLog;
+            };
+
+            // -- Effects --
+            useEffect(() => {
+                reset();
+            }, [arraySize]); 
+
+            const reset = () => {
+                setIsPlaying(false);
+                setIsFound(false);
+                setCurrentStepIndex(0);
+                
+                const newArr = generateArray(arraySize);
+                setArray(newArr);
+                
+                // Determine target: 80% chance it exists in the array, 20% random
+                let newTarget;
+                if (Math.random() > 0.2) {
+                    const randomIdx = Math.floor(Math.random() * newArr.length);
+                    newTarget = newArr[randomIdx];
+                } else {
+                    newTarget = Math.floor(Math.random() * 50) + 1;
+                }
+                setTargetValue(newTarget);
+
+                const generatedSteps = generateSteps(newArr, newTarget);
+                setSteps(generatedSteps);
+            };
+
+            const handleNodeClick = (value) => {
+                // Stop current animation
+                setIsPlaying(false);
+                setIsFound(false);
+                setCurrentStepIndex(0);
+                
+                // Set new target and regenerate steps
+                setTargetValue(value);
+                const generatedSteps = generateSteps(array, value);
+                setSteps(generatedSteps);
+            };
+
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                clearInterval(timerRef.current);
+                                return prev;
+                            }
+                        });
+                    }, 2000 - animationSpeed);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps.length, animationSpeed]);
+
+
+            // -- Controls --
+            const handleNext = () => {
+                if (currentStepIndex < steps.length - 1) {
+                    setCurrentStepIndex(prev => prev + 1);
+                    setIsPlaying(false);
+                }
+            };
+
+            const handlePrev = () => {
+                if (currentStepIndex > 0) {
+                    setCurrentStepIndex(prev => prev - 1);
+                    setIsPlaying(false);
+                }
+            };
+
+            const togglePlay = () => {
+                if (currentStepIndex === steps.length - 1) { 
+                    reset();
+                    setTimeout(() => setIsPlaying(true), 100); 
+                } else {
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+
+            // -- Render Helpers --
+            const getCurrentStep = () => steps[currentStepIndex] || { type: 'initial', currentIndex: -1, checkedIndices: [] };
+
+            const getBarColor = (index) => {
+                const step = getCurrentStep();
+                
+                // If we found it, keep it green
+                if (step.foundIndex === index) return COLORS.found;
+                
+                // Currently checking this index
+                if (step.currentIndex === index) {
+                    return COLORS.checking;
+                }
+
+                // Previously checked (and not found)
+                if (step.checkedIndices && step.checkedIndices.includes(index)) {
+                    return COLORS.checked; 
+                }
+                
+                return COLORS.default;
+            };
+
+            const getOpacity = (index) => {
+                const step = getCurrentStep();
+                // If checking current, full opacity
+                if (step.currentIndex === index) return 'opacity-100';
+                // If found, full opacity for the found item
+                if (step.foundIndex === index) return 'opacity-100';
+                
+                // If checked (visited), dim it slightly to show "discarded"
+                if (step.checkedIndices && step.checkedIndices.includes(index)) return 'opacity-40';
+
+                return 'opacity-90';
+            }
+
+            const currentDesc = steps[currentStepIndex]?.description || "Press Play to start search.";
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Top Bar Wrapper */
+                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-6" },
+                    
+                    /* Title (Left) */
+                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                        React.createElement(Search, { size: 32, className: "text-indigo-400" }),
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Linear Search")
+                    ),
+
+                    /* Controls (Right) */
+                    React.createElement("div", { className: "flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                        
+                        /* Size Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
+                            React.createElement("input", {
+                                type: "range", min: "5", max: "20", step: "1",
+                                value: arraySize,
+                                onChange: (e) => setArraySize(Number(e.target.value)),
+                                disabled: isPlaying,
+                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                            }),
+                        ),
+
+                        /* Speed Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
+                            React.createElement("input", {
+                                type: "range", min: "100", max: "1900", step: "100",
+                                value: animationSpeed,
+                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                            })
+                        ),
+
+                        /* Separator */
+                        React.createElement("div", { className: "h-8 w-px bg-slate-700 hidden sm:block mx-2" }),
+
+                        /* Playback Buttons */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors", title: "Reset" },
+                                React.createElement(RotateCcw, { size: 18 })
+                            ),
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipBack, { size: 18 })
+                            ),
+                            React.createElement("button", { 
+                                onClick: togglePlay, 
+                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                            },
+                                isPlaying 
+                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
+                            ),
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipForward, { size: 18 })
+                            )
+                        )
+                    )
+                ),
+
+                /* Description Box */
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6 flex items-center justify-center shadow-lg" },
+                    React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                ),
+
+                /* Main Content */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-4" },
+                    
+                    /* Header Row: Target & Legend */
+                    React.createElement("div", { className: "flex flex-col sm:flex-row justify-between items-center gap-4 w-full" },
+                        
+                         /* Target Indicator (Moved Here) */
+                         React.createElement("div", { className: "flex items-center gap-3 bg-slate-900/50 px-4 py-2 rounded-lg border border-slate-700/50 shadow-inner" },
+                            React.createElement(Target, { size: 18, className: "text-indigo-400" }),
+                            React.createElement("span", { className: "text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Target:"),
+                            React.createElement("span", { className: "text-xl font-mono font-bold text-indigo-300" }, targetValue !== null ? targetValue : "?")
+                        ),
+
+                        /* Legend (Right) */
+                        React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300" },
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.checking}` }), "Checking"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.checked}` }), "Checked / Not Found"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.found}` }), "Found"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.default}` }), "Unvisited"
+                            )
+                        )
+                    ),
+
+                    /* Divider */
+                    React.createElement("div", { className: "w-full h-px bg-slate-700/50 my-1" }),
+
+                    /* Array Representation */
+                    React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
+                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Representation (Click node to set as Target)"),
+                    React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 px-4" },
+                        array.map((val, idx) => {
+                            const step = getCurrentStep();
+                            const isCurrent = step.currentIndex === idx;
+                            const isFound = step.foundIndex === idx;
+                            const isChecked = step.checkedIndices && step.checkedIndices.includes(idx);
+                            
+                            // Highlight border and elevate if it's the one we are looking at currently
+                            let boxClass = 'bg-slate-800 text-slate-300 border-slate-600';
+                            if (isFound) boxClass = 'bg-emerald-900 text-emerald-100 border-emerald-500 border-2 shadow-emerald-500/50 shadow-md -translate-y-2';
+                            else if (isCurrent) boxClass = 'bg-amber-900 text-amber-100 border-amber-500 border-2 shadow-amber-500/50 shadow-md -translate-y-2';
+                            else if (isChecked) boxClass = 'bg-slate-800 text-slate-500 border-slate-700 opacity-60';
+
+                            return React.createElement("div", { 
+                                key: idx, 
+                                onClick: () => handleNodeClick(val),
+                                title: "Click to search for this value",
+                                className: `relative w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-300 border cursor-pointer hover:scale-110 hover:z-10 hover:border-indigo-400 hover:shadow-lg hover:shadow-indigo-500/20
+                                ${boxClass}`
+                            },
+                                React.createElement("span", null, val),
+                                React.createElement("span", { className: "text-[9px] font-normal opacity-50 leading-none mt-1" }, idx),
+                                
+                                /* Arrow for current inspection */
+                                (isCurrent || isFound) && React.createElement("div", { className: `absolute -bottom-5 ${isFound ? 'text-emerald-500' : 'text-amber-500'} animate-bounce` }, 
+                                    React.createElement(ArrowDown, { size: 14 })
+                                )
+                            )
+                        })
+                    )
+                    ),
+
+                    /* Bar Chart */
+                    React.createElement("div", { className: "relative w-full h-64 sm:h-80 bg-slate-900/50 rounded-lg p-4 flex items-end justify-center overflow-hidden mt-4 border border-slate-800" },
+                    React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                    React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
+                        array.map((val, idx) => {
+                        const heightPct = (val / 60) * 100;
+                        return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group ${getOpacity(idx)}` },
+                            React.createElement("span", { className: "text-[10px] text-slate-200 mb-1 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
+                            React.createElement("div", { 
+                            className: `w-full rounded-t-md transition-all duration-200 ease-in-out ${getBarColor(idx)}`,
+                            style: { height: `${heightPct}%` }
+                            })
+                        );
+                        })
+                    )
+                    ),
+
+                    /* Footer */
+                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 mt-2" },
+                    React.createElement("span", null, `STEP ${currentStepIndex} / ${steps.length > 0 ? steps.length - 1 : 0}`),
+                    React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full" },
+                        React.createElement("div", { 
+                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                        style: { width: `${steps.length > 1 ? (currentStepIndex / (steps.length - 1)) * 100 : 0}%` }
+                        })
+                    ),
+                    React.createElement("span", null, steps[currentStepIndex]?.type.includes('found') ? (steps[currentStepIndex]?.type === 'finished_not_found' ? "Not Found" : "Match Found") : "Searching...")
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(LinearSearchVisualizer));
+    </script>
+</body>
+</html>
