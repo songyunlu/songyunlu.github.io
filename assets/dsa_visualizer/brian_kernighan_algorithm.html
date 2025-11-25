@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brian Kernighan's Algorithm Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar for cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        /* Animation for description text */
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Cpu, CheckCircle2 } from 'lucide-react';
+
+        const BrianKernighanVisualizer = () => {
+            // -- State --
+            const [numBits, setNumBits] = useState(12); // "Size" roughly maps to number of bits
+            const [animationSpeed, setAnimationSpeed] = useState(1000); 
+            const [bitArray, setBitArray] = useState([]);
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const [isFinished, setIsFinished] = useState(false);
+            
+            // Refs
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                zero: 'bg-slate-700',        // Inactive bit (0)
+                one: 'bg-indigo-500',        // Active bit (1)
+                target: 'bg-amber-500',      // The LSB being processed
+                clearing: 'bg-red-500',      // The bit being removed
+                finished: 'bg-emerald-500',  // Done state
+            };
+
+            // -- Algorithm Logic --
+            // Generates a random number and returns its binary representation as an array of 0s and 1s
+            const generateBits = useCallback((size) => {
+                // Create a random integer that fits within 'size' bits
+                // We ensure at least a few bits are set for the demo
+                const maxVal = Math.pow(2, size) - 1;
+                const randomVal = Math.floor(Math.random() * maxVal);
+                
+                // Convert to binary array (padded)
+                // e.g. 6 (3 bits) -> [1, 1, 0] (MSB at index 0)
+                const binaryString = randomVal.toString(2).padStart(size, '0');
+                return binaryString.split('').map(Number);
+            }, []);
+
+            const generateSteps = (initialBits) => {
+                const stepsLog = [];
+                // We work with a copy of the bits for the simulation
+                let currentBits = [...initialBits];
+                let setBitCount = 0;
+                
+                // Helper to convert bits back to decimal for descriptions
+                const getDecimal = (bits) => parseInt(bits.join(''), 2);
+
+                // Step 0: Initial State
+                stepsLog.push({
+                    bits: [...currentBits],
+                    type: 'initial',
+                    highlights: [],
+                    count: 0,
+                    description: `Initial Number: ${getDecimal(currentBits)}. Binary representation shown below.`
+                });
+
+                // Kernighan's Algorithm: while n > 0
+                while (currentBits.includes(1)) {
+                    // 1. Identify the rightmost set bit (LSB)
+                    // In our array (MSB at 0), this is the largest index with a 1
+                    const lsbIndex = currentBits.lastIndexOf(1);
+
+                    // Step: Highlight Target
+                    stepsLog.push({
+                        bits: [...currentBits],
+                        type: 'identify',
+                        highlights: [lsbIndex],
+                        count: setBitCount,
+                        description: `Identify the rightmost set bit (1) at index ${lsbIndex}. This is our target.`
+                    });
+
+                    // Step: Explain the Mask (Conceptually n-1)
+                    // (n-1) flips the LSB to 0 and all trailing 0s to 1s. 
+                    // We visualize the target changing color to indicate it's about to get wiped.
+                    stepsLog.push({
+                        bits: [...currentBits],
+                        type: 'mask_logic',
+                        highlights: [lsbIndex],
+                        count: setBitCount,
+                        description: `Operation: n = n & (n - 1). This logic subtracts 1, flipping the target bit and trailing zeros, then masks them out.`
+                    });
+
+                    // Step: Clear the bit
+                    currentBits[lsbIndex] = 0;
+                    setBitCount++;
+
+                    stepsLog.push({
+                        bits: [...currentBits],
+                        type: 'clear',
+                        highlights: [lsbIndex], // Keep highlighted briefly as it turns to 0
+                        count: setBitCount,
+                        description: `Bit cleared! The bit at index ${lsbIndex} is now 0. Total set bits found: ${setBitCount}.`
+                    });
+                }
+                
+                // Final Step
+                stepsLog.push({
+                    bits: [...currentBits],
+                    type: 'finished',
+                    highlights: [],
+                    count: setBitCount,
+                    description: `Algorithm Complete. The number is now 0. Total Set Bits: ${setBitCount}.`
+                });
+
+                return stepsLog;
+            };
+
+            // -- Effects --
+            useEffect(() => {
+                reset();
+            }, [numBits]); 
+
+            const reset = () => {
+                setIsPlaying(false);
+                setIsFinished(false);
+                setCurrentStepIndex(0);
+                const newBits = generateBits(numBits);
+                setBitArray(newBits);
+                const generatedSteps = generateSteps(newBits);
+                setSteps(generatedSteps);
+            };
+
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                setIsFinished(true);
+                                clearInterval(timerRef.current);
+                                return prev;
+                            }
+                        });
+                    }, 2100 - animationSpeed); // Speed mapping
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps.length, animationSpeed]);
+
+
+            // -- Controls --
+            const handleNext = () => {
+                if (currentStepIndex < steps.length - 1) {
+                    setCurrentStepIndex(prev => prev + 1);
+                    setIsPlaying(false);
+                } else {
+                    setIsFinished(true);
+                }
+            };
+
+            const handlePrev = () => {
+                if (currentStepIndex > 0) {
+                    setCurrentStepIndex(prev => prev - 1);
+                    setIsPlaying(false);
+                    setIsFinished(false);
+                }
+            };
+
+            const togglePlay = () => {
+                if (currentStepIndex === steps.length - 1) { 
+                    reset();
+                    setTimeout(() => setIsPlaying(true), 100); 
+                } else {
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+
+            // -- Render Helpers --
+            const getCurrentStep = () => steps[currentStepIndex] || { bits: bitArray, description: "Ready", type: 'initial', count: 0 };
+
+            const getBarColor = (index, val) => {
+                const step = getCurrentStep();
+                
+                if (step.type === 'finished') return COLORS.finished;
+
+                // If this index is highlighted in the current step
+                if (step.highlights && step.highlights.includes(index)) {
+                    if (step.type === 'identify') return COLORS.target;
+                    if (step.type === 'mask_logic') return COLORS.clearing;
+                    if (step.type === 'clear') return COLORS.zero; // Just turned zero
+                }
+
+                // Standard coloring based on value
+                return val === 1 ? COLORS.one : COLORS.zero;
+            };
+
+            // Determine opacity/dimming
+            const getOpacity = (index) => {
+                return 'opacity-100'; // Keep high visibility for bits
+            }
+
+            const currentBits = steps[currentStepIndex]?.bits || bitArray;
+            const currentDesc = steps[currentStepIndex]?.description || "Press Play to start counting bits.";
+            const currentCount = steps[currentStepIndex]?.count || 0;
+            
+            // Calculate progress percentage
+            const progress = steps.length > 1 ? ((currentStepIndex) / (steps.length - 1)) * 100 : 0;
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Top Bar Wrapper */
+                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-6" },
+                    
+                    /* Title (Standalone Left) */
+                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                        React.createElement(Cpu, { size: 32, className: "text-indigo-400" }),
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Brian Kernighan's Algo")
+                    ),
+
+                    /* Controls (Pill-shaped Container Right) */
+                    React.createElement("div", { className: "flex flex-wrap items-center justify-end gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                        
+                        /* Speed Slider */
+                        React.createElement("div", { className: "flex items-center gap-3" },
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
+                            React.createElement("input", {
+                                type: "range", min: "100", max: "2000", step: "100",
+                                value: animationSpeed,
+                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                            })
+                        ),
+
+                        /* Separator */
+                        React.createElement("div", { className: "h-8 w-px bg-slate-700 hidden sm:block mx-2" }),
+
+                        /* Playback Buttons */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors", title: "Reset" },
+                                React.createElement(RotateCcw, { size: 18 })
+                            ),
+                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipBack, { size: 18 })
+                            ),
+                            React.createElement("button", { 
+                                onClick: togglePlay, 
+                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                            },
+                                isPlaying 
+                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
+                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
+                            ),
+                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
+                                React.createElement(SkipForward, { size: 18 })
+                            )
+                        )
+                    )
+                ),
+
+                /* Settings Bar (Bits) */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex items-center justify-end gap-6 shadow-sm z-10" },
+                    /* Size Slider (Bits) */
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("span", { className: "text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Bits"),
+                        React.createElement("input", {
+                            type: "range", min: "4", max: "20", step: "1",
+                            value: numBits,
+                            onChange: (e) => setNumBits(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, numBits)
+                    )
+                ),
+
+                /* Description Box */
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center shadow-lg" },
+                    React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                ),
+
+                /* Main Content */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-4" },
+                    
+                    /* Legend (Top Right) */
+                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 w-full" },
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.one}` }), "Bit Set (1)"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.zero}` }), "Bit Unset (0)"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.target}` }), "Target (Rightmost 1)"
+                        ),
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.clearing}` }), "Clearing"
+                        )
+                    ),
+
+                    /* Divider after Legend */
+                    React.createElement("div", { className: "w-full h-px bg-slate-700/50 my-1" }),
+
+                    /* Array Representation (The Bits) */
+                    React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
+                        React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Binary Representation (Array)"),
+                        React.createElement("div", { className: "flex justify-center flex-wrap w-full gap-1 sm:gap-2 px-4" },
+                            currentBits.map((val, idx) => {
+                                const isTarget = (steps[currentStepIndex]?.highlights || []).includes(idx);
+                                return React.createElement("div", { 
+                                    key: idx, 
+                                    className: `relative w-8 sm:w-12 aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 border border-slate-600
+                                    ${isTarget ? 'border-amber-400 border-2 -translate-y-1 shadow-amber-500/30 shadow-md z-10 scale-110' : 'bg-slate-800 text-slate-300'}
+                                    ${val === 1 && !isTarget ? 'text-indigo-200 bg-slate-800' : ''}
+                                    ${val === 0 && !isTarget ? 'text-slate-500 bg-slate-900/50' : ''}
+                                    `
+                                },
+                                    React.createElement("span", null, val),
+                                    React.createElement("span", { className: "text-[8px] font-normal text-slate-600 leading-none mt-1 absolute bottom-1" }, idx),
+                                )
+                            })
+                        )
+                    ),
+
+                    /* Bar Chart (Digital Signal Style) */
+                    React.createElement("div", { className: "relative w-full h-48 sm:h-64 bg-slate-900/50 rounded-lg p-4 flex items-end justify-center overflow-hidden mt-4 border border-slate-800" },
+                        React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                        
+                        /* Label for the Chart */
+                        React.createElement("div", { className: "absolute top-4 left-4 text-xs font-mono text-slate-500" }, 
+                            "VISUALIZATION: BIT VALUES"
+                        ),
+
+                        React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
+                            currentBits.map((val, idx) => {
+                                // Height is 80% for '1', 20% for '0' to look like digital signal
+                                const heightPct = val === 1 ? 80 : 20;
+                                return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group` },
+                                    /* Value tooltip on hover */
+                                    React.createElement("span", { className: "text-[10px] text-slate-400 mb-2 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
+                                    
+                                    /* The Bar */
+                                    React.createElement("div", { 
+                                        className: `w-full rounded-t-md transition-all duration-300 ease-in-out ${getBarColor(idx, val)}`,
+                                        style: { height: `${heightPct}%` }
+                                    })
+                                );
+                            })
+                        )
+                    ),
+
+                    /* Footer */
+                    React.createElement("div", { className: "w-full flex flex-col sm:flex-row justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 mt-2 gap-4 sm:gap-0" },
+                        React.createElement("div", { className: "flex gap-4" },
+                            React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                        ),
+                        
+                        /* Progress Bar */
+                        React.createElement("div", { className: "w-full sm:w-40 h-1 bg-slate-700 rounded-full mx-4" },
+                            React.createElement("div", { 
+                                className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                style: { width: `${progress}%` }
+                            })
+                        ),
+                        
+                        /* Set Bit Counter */
+                        React.createElement("div", { className: "flex items-center gap-2 text-indigo-300 font-mono bg-slate-900 px-3 py-1 rounded-full border border-indigo-900/50" },
+                            isFinished ? React.createElement(CheckCircle2, { size: 14, className: "text-emerald-500" }) : null,
+                            React.createElement("span", null, `SET BITS: ${currentCount}`)
+                        )
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(BrianKernighanVisualizer));
+    </script>
+</body>
+</html>
