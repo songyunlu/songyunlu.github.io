@@ -248,10 +248,6 @@
                 setIsPlaying(false);
                 setIsFound(false);
                 setCurrentStepIndex(0);
-                // Only generate new array if size changed significantly or explicit reset
-                // But for React simplicity here, we'll regen array if size changed, else keep logic
-                // Actually simpler to just regen array on size change, reuse array on K change if possible
-                // For this demo, we'll regen to keep it fresh.
                 const newArr = generateArray(size);
                 setArray(newArr);
                 const generatedSteps = generateSteps(newArr, k);
@@ -342,10 +338,6 @@
 
                 // If it is the current Pivot
                 if (index === step.pivotIndex) return COLORS.pivot;
-
-                // Visualization of "Less" vs "Greater" during partition
-                // We can infer this by index relative to partitionIndex if we wanted complexity,
-                // but strictly following highlights is clearer.
                 
                 return COLORS.default;
             };
@@ -370,7 +362,7 @@
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
                 /* Top Bar Wrapper */
-                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-6" },
+                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-6" },
                     
                     /* Title (Standalone Left) */
                     React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
@@ -378,22 +370,9 @@
                         React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Quickselect")
                     ),
 
-                    /* Controls (Pill-shaped Container Right) */
-                    React.createElement("div", { className: "flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                    /* Controls (Pill-shaped Container Right) - Size Slider Removed from Here */
+                    React.createElement("div", { className: "flex flex-wrap items-center justify-end gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
                         
-                        /* Size Slider */
-                        React.createElement("div", { className: "flex items-center gap-3" },
-                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
-                            React.createElement("input", {
-                                type: "range", min: "5", max: "25", step: "1",
-                                value: arraySize,
-                                onChange: (e) => setArraySize(Number(e.target.value)),
-                                disabled: isPlaying,
-                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
-                            }),
-                            React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
-                        ),
-
                         /* Speed Slider */
                         React.createElement("div", { className: "flex items-center gap-3" },
                             React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
@@ -431,8 +410,23 @@
                     )
                 ),
 
+                /* New Size Slider Bar (Separated) */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex items-center justify-end shadow-sm" },
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
+                        React.createElement("input", {
+                            type: "range", min: "5", max: "25", step: "1",
+                            value: arraySize,
+                            onChange: (e) => setArraySize(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
+                    )
+                ),
+
                 /* Description Box */
-                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6 flex items-center justify-center shadow-lg transition-all" },
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center shadow-lg transition-all" },
                     React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
                 ),
 
@@ -442,7 +436,7 @@
                     /* Legend Row Wrapper */
                     React.createElement("div", { className: "flex flex-col sm:flex-row items-center justify-between w-full gap-4" },
                         
-                        /* Find Kth Control (Moved Here) */
+                        /* Find Kth Control */
                         React.createElement("div", { className: "flex items-center gap-3 bg-slate-700/50 px-3 py-1.5 rounded-lg border border-slate-600 shadow-inner" },
                             React.createElement("span", { className: "text-[10px] sm:text-xs text-indigo-300 font-bold tracking-wider uppercase flex items-center gap-1" }, 
                                 React.createElement(Hash, { size: 12 }), "Find K"
@@ -485,12 +479,15 @@
 
                     /* Array Representation */
                     React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
-                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Representation"),
+                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Representation (Click node to set Target)"),
                     React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 px-4 flex-wrap sm:flex-nowrap" },
                         currentData.map((val, idx) => 
                         React.createElement("div", { 
                             key: idx, 
-                            className: `relative w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-300 border border-slate-600
+                            onClick: () => {
+                                if (!isPlaying) setTargetK(idx + 1);
+                            },
+                            className: `relative w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-300 border border-slate-600 cursor-pointer hover:scale-105 hover:border-cyan-400 hover:shadow-lg hover:shadow-cyan-500/20 hover:z-20
                             ${idx === currentPivot ? 'border-indigo-400 border-2 shadow-indigo-500/50 shadow-md bg-indigo-900 text-indigo-100 z-10' : 'bg-slate-800 text-slate-300'}
                             ${getOpacity(idx)}`
                         },

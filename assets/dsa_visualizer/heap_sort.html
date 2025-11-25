@@ -311,8 +311,8 @@
             return (
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
-                /* Top Bar Wrapper */
-                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-6" },
+                /* Top Bar Wrapper (mb-6 -> mb-4) */
+                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-6" },
                     
                     /* Title */
                     React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
@@ -320,24 +320,11 @@
                         React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Heap Sort")
                     ),
 
-                    /* Controls */
-                    React.createElement("div", { className: "flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                    /* Controls (Right - Just Speed and Playback now) */
+                    React.createElement("div", { className: "flex flex-wrap items-center lg:justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
                         
-                        /* Size Slider */
-                        React.createElement("div", { className: "flex items-center gap-3" },
-                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
-                            React.createElement("input", {
-                                type: "range", min: "7", max: "31", step: "1",
-                                value: arraySize,
-                                onChange: (e) => setArraySize(Number(e.target.value)),
-                                disabled: isPlaying,
-                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
-                            }),
-                            React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
-                        ),
-
                         /* Speed Slider */
-                        React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("div", { className: "flex items-center gap-3 ml-auto" },
                             React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
                             React.createElement("input", {
                                 type: "range", min: "100", max: "1900", step: "100",
@@ -373,8 +360,23 @@
                     )
                 ),
 
-                /* Description Box */
-                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6 flex items-center justify-center shadow-lg" },
+                /* New Settings Bar (Size Slider) (mb-6 -> mb-4) */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex items-center justify-end shadow-sm" },
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
+                        React.createElement("input", {
+                            type: "range", min: "7", max: "31", step: "1",
+                            value: arraySize,
+                            onChange: (e) => setArraySize(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
+                    )
+                ),
+
+                /* Description Box (mb-6 -> mb-4) */
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center shadow-lg" },
                     React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentStep.description)
                 ),
 

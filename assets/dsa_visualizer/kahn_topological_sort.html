@@ -457,7 +457,7 @@
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
                 
                 /* Top Control Bar */
-                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
+                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
                     
                     /* 1. Title & Icon */
                     React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
@@ -468,46 +468,18 @@
                         )
                     ),
 
-                    /* 2. Controls */
-                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
+                    /* 2. Controls Pill (Speed & Playback Only) */
+                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-end gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
                         
-                        /* Sliders Group */
-                        React.createElement("div", { className: "flex items-center gap-4 flex-wrap justify-center" },
-                            /* Nodes Slider */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Size"),
-                                React.createElement("input", {
-                                    type: "range", min: "3", max: "10", step: "1",
-                                    value: nodeCount,
-                                    onChange: (e) => setNodeCount(Number(e.target.value)),
-                                    disabled: isPlaying,
-                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
-                                }),
-                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
-                            ),
-
-                            /* Density Slider */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Edge %"),
-                                React.createElement("input", {
-                                    type: "range", min: "0.5", max: "2.5", step: "0.5",
-                                    value: edgeDensity,
-                                    onChange: (e) => setEdgeDensity(Number(e.target.value)),
-                                    disabled: isPlaying,
-                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
-                                }),
-                            ),
-
-                            /* Speed Slider */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
-                                React.createElement("input", {
-                                    type: "range", min: "100", max: "1900", step: "100",
-                                    value: animationSpeed,
-                                    onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                })
-                            )
+                        /* Speed Slider */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
+                            React.createElement("input", {
+                                type: "range", min: "100", max: "1900", step: "100",
+                                value: animationSpeed,
+                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                            })
                         ),
 
                         /* Vertical Separator */
@@ -533,6 +505,35 @@
                                 React.createElement(SkipForward, { size: 18 })
                             )
                         )
+                    )
+                ),
+
+                /* Settings Bar (Size & Density) - New Block */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex flex-wrap items-center justify-end gap-6 shadow-sm" },
+                    /* Nodes Slider */
+                    React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Size"),
+                        React.createElement("input", {
+                            type: "range", min: "3", max: "10", step: "1",
+                            value: nodeCount,
+                            onChange: (e) => setNodeCount(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
+                    ),
+
+                    /* Density Slider */
+                    React.createElement("div", { className: "flex items-center gap-2" },
+                        React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Edge %"),
+                        React.createElement("input", {
+                            type: "range", min: "0.5", max: "2.5", step: "0.5",
+                            value: edgeDensity,
+                            onChange: (e) => setEdgeDensity(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, edgeDensity)
                     )
                 ),
 

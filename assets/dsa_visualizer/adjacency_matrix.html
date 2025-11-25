@@ -66,7 +66,7 @@
             
             // Graph Configuration State
             const [isWeighted, setIsWeighted] = useState(true);
-            const [isDirected, setIsDirected] = useState(false);
+            const [isDirected, setIsDirected] = useState(true); 
 
             const [graph, setGraph] = useState({ nodes: [], edges: [] });
             const [steps, setSteps] = useState([]);
@@ -223,8 +223,6 @@
                 // Ensure connectivity (spanning tree-ish)
                 for(let i=0; i<count-1; i++){
                      const w = weighted ? Math.floor(Math.random() * 9) + 1 : 1;
-                     // For visualization simplicity, just link linearly first so it's not disjoint
-                     // (In directed, this might only go one way, which is fine)
                      edges.push({ source: i, target: i+1, weight: w });
                 }
 
@@ -415,7 +413,6 @@
             };
 
             const getEdgeColor = (u, v) => {
-                // Determine if this edge is being highlighted
                 let isHighlighted = false;
                 
                 // Hover highlight
@@ -447,7 +444,6 @@
             };
 
             const getEdgeWidth = (u, v) => {
-                // Same logic as color for width boost
                 let isHighlighted = false;
                 if (hoveredCell) {
                     if (isDirected) {
@@ -471,7 +467,7 @@
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
                 
                 /* Header */
-                React.createElement("div", { className: "w-full max-w-6xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
+                React.createElement("div", { className: "w-full max-w-6xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
                     /* Title */
                     React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
                         React.createElement(Grid, { size: 38, className: "text-blue-400" }),
@@ -481,44 +477,19 @@
                         )
                     ),
 
-                    /* Controls Pill */
-                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
+                    /* Controls Pill (Speed + Playback only) */
+                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-end gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
                         
-                        /* Sliders */
-                        React.createElement("div", { className: "flex items-center gap-4 flex-wrap justify-center" },
-                            /* Size */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Nodes"),
-                                React.createElement("input", {
-                                    type: "range", min: "3", max: "10", step: "1",
-                                    value: nodeCount,
-                                    onChange: (e) => setNodeCount(Number(e.target.value)),
-                                    disabled: isPlaying,
-                                    className: "w-16 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
-                                }),
-                            ),
-
-                            /* Density Slider */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Density"),
-                                React.createElement("input", {
-                                    type: "range", min: "0.5", max: "3.0", step: "0.1",
-                                    value: edgeDensity,
-                                    onChange: (e) => setEdgeDensity(Number(e.target.value)),
-                                    disabled: isPlaying,
-                                    className: "w-16 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                                }),
-                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-6" }, edgeDensity.toFixed(1))
-                            ),
-
-                            /* Speed */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
+                        /* Sliders Group (Only Speed now) */
+                        React.createElement("div", { className: "flex items-center gap-4 flex-wrap justify-end" },
+                             /* Speed */
+                             React.createElement("div", { className: "flex items-center gap-3" },
+                                React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
                                 React.createElement("input", {
                                     type: "range", min: "100", max: "1900", step: "100",
                                     value: animationSpeed,
                                     onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                    className: "w-16 h-1 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                                 })
                             )
                         ),
@@ -535,6 +506,55 @@
                             }, isPlaying ? React.createElement(Pause, { size: 20, fill: "currentColor" }) : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })),
                             React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "text-slate-400 hover:text-white disabled:opacity-30" }, React.createElement(SkipForward, { size: 18 }))
                         )
+                    )
+                ),
+
+                /* New Settings Bar (Reference Style) */
+                React.createElement("div", { className: "w-full max-w-6xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6 shadow-sm" },
+                     /* Size */
+                     React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Nodes"),
+                        React.createElement("input", {
+                            type: "range", min: "3", max: "10", step: "1",
+                            value: nodeCount,
+                            onChange: (e) => setNodeCount(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
+                    ),
+
+                    /* Density Slider */
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Density"),
+                        React.createElement("input", {
+                            type: "range", min: "0.5", max: "3.0", step: "0.1",
+                            value: edgeDensity,
+                            onChange: (e) => setEdgeDensity(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 font-mono w-6" }, edgeDensity.toFixed(1))
+                    ),
+
+                    /* Vertical Separator (Hidden on small screens) */
+                    React.createElement("div", { className: "h-6 w-px bg-slate-700 mx-2 hidden sm:block" }),
+
+                    /* Weight Toggle */
+                    React.createElement("button", { 
+                        onClick: () => !isPlaying && setIsWeighted(!isWeighted),
+                        disabled: isPlaying,
+                        className: `flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all hover:bg-opacity-80 disabled:opacity-50 ${isWeighted ? 'bg-sky-900/50 border-sky-500 text-sky-300' : 'bg-slate-700 border-slate-600 text-slate-400'}`
+                    }, React.createElement(Hash, { size: 14 }), "Weighted"),
+
+                    /* Direct Toggle */
+                    React.createElement("button", { 
+                        onClick: () => !isPlaying && setIsDirected(!isDirected),
+                        disabled: isPlaying,
+                        className: `flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border transition-all hover:bg-opacity-80 disabled:opacity-50 ${isDirected ? 'bg-purple-900/50 border-purple-500 text-purple-300' : 'bg-slate-700 border-slate-600 text-slate-400'}`
+                    }, 
+                        isDirected ? React.createElement(ArrowRight, { size: 14 }) : React.createElement(MoveHorizontal, { size: 14 }), 
+                        "Directed"
                     )
                 ),
 
@@ -640,26 +660,6 @@
                                 )
                             ),
                             
-                            /* Top Left Controls (Weights / Direction) */
-                            React.createElement("div", { className: "absolute top-4 left-4 flex flex-col gap-2 bg-slate-800/90 p-1.5 rounded-lg shadow-xl border border-slate-700" },
-                                /* Weight Toggle */
-                                React.createElement("button", { 
-                                    onClick: () => !isPlaying && setIsWeighted(!isWeighted),
-                                    disabled: isPlaying,
-                                    className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold border w-20 justify-center ${isWeighted ? 'bg-sky-900/50 border-sky-500 text-sky-300' : 'bg-slate-700 border-slate-600 text-slate-400'} transition-all hover:bg-opacity-80`
-                                }, React.createElement(Hash, { size: 14 }), "Weight"),
-
-                                /* Direct Toggle */
-                                React.createElement("button", { 
-                                    onClick: () => !isPlaying && setIsDirected(!isDirected),
-                                    disabled: isPlaying,
-                                    className: `flex items-center gap-1 px-2 py-1.5 rounded text-xs font-bold border w-20 justify-center ${isDirected ? 'bg-purple-900/50 border-purple-500 text-purple-300' : 'bg-slate-700 border-slate-600 text-slate-400'} transition-all hover:bg-opacity-80`
-                                }, 
-                                    isDirected ? React.createElement(ArrowRight, { size: 14 }) : React.createElement(MoveHorizontal, { size: 14 }), 
-                                    isDirected ? "Direct" : "Undir"
-                                )
-                            ),
-
                             /* Zoom Controls */
                             React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-1.5 rounded-lg shadow-xl border border-slate-700" },
                                 React.createElement("button", { onClick: handleZoomIn, className: "p-1.5 hover:bg-slate-700 text-slate-300 rounded" }, React.createElement(ZoomIn, { size: 18 })),

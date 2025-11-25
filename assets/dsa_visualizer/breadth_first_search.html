@@ -518,7 +518,8 @@
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
                 
                 /* Top Control Bar */
-                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
+                /* CHANGED: mb-2 to mb-4 for consistent spacing */
+                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
                     
                     /* 1. Title & Icon */
                     React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
@@ -529,47 +530,19 @@
                         )
                     ),
 
-                    /* 2. Control Pill */
-                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-center gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
+                    /* 2. Control Pill (Right) */
+                    /* CHANGED: justify-center -> justify-end to align controls to the right on resize */
+                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-2 px-4 sm:px-6 flex flex-wrap items-center justify-end gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
                         
-                        /* Sliders Group */
-                        React.createElement("div", { className: "flex items-center gap-4 flex-wrap justify-center" },
-                            /* Nodes Slider */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Size"),
-                                React.createElement("input", {
-                                    type: "range", min: "3", max: "15", step: "1",
-                                    value: nodeCount,
-                                    onChange: (e) => setNodeCount(Number(e.target.value)),
-                                    disabled: isPlaying,
-                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
-                                }),
-                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
-                            ),
-
-                            /* Density Slider */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Density"),
-                                React.createElement("input", {
-                                    type: "range", min: "0", max: "2.5", step: "0.5",
-                                    value: edgeDensity,
-                                    onChange: (e) => setEdgeDensity(Number(e.target.value)),
-                                    disabled: isPlaying,
-                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
-                                }),
-                                React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, edgeDensity)
-                            ),
-
-                            /* Speed Slider */
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
-                                React.createElement("input", {
-                                    type: "range", min: "100", max: "1900", step: "100",
-                                    value: animationSpeed,
-                                    onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                    className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                                })
-                            )
+                        /* Speed Slider */
+                        React.createElement("div", { className: "flex items-center gap-2" },
+                            React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
+                            React.createElement("input", {
+                                type: "range", min: "100", max: "1900", step: "100",
+                                value: animationSpeed,
+                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                            })
                         ),
 
                         /* Separator */
@@ -598,6 +571,37 @@
                     )
                 ),
 
+                /* New Control Bar (Size & Density) - Aligned Right with Increased Height */
+                /* Note: mb-4 matches the header margin now */
+                React.createElement("div", { className: "w-full max-w-5xl mb-4 bg-slate-800 border border-slate-700 rounded-xl p-4 flex items-center justify-end gap-8 shadow-sm" },
+                    
+                    /* Nodes Slider */
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider font-semibold" }, "Nodes"),
+                        React.createElement("input", {
+                            type: "range", min: "3", max: "15", step: "1",
+                            value: nodeCount,
+                            onChange: (e) => setNodeCount(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4 text-right" }, nodeCount)
+                    ),
+
+                    /* Density Slider */
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider font-semibold" }, "Density"),
+                        React.createElement("input", {
+                            type: "range", min: "0", max: "2.5", step: "0.5",
+                            value: edgeDensity,
+                            onChange: (e) => setEdgeDensity(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4 text-right" }, edgeDensity)
+                    )
+                ),
+
                 /* Instruction Block */
                 React.createElement("div", { className: "w-full max-w-5xl min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center text-center shadow-sm" },
                     React.createElement("p", { className: "text-md text-purple-100 font-medium animate-fade-in" }, currentStep.description)
@@ -606,22 +610,26 @@
                 /* Main Content Area */
                 React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 sm:p-6 flex flex-col gap-6" },
                     
-                    /* Legend */
-                    React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300 border-b border-slate-700 pb-4" },
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.current } }), " Current (Dequeued)"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.neighbor } }), " Checking"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.inQueue } }), " In Queue"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.visited } }), " Processed"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.path } }), " Tree Edge"
+                    /* Legend Row (Sliders removed from here) */
+                    React.createElement("div", { className: "flex justify-end items-center border-b border-slate-700 pb-4" },
+                        
+                        /* Legend */
+                        React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300" },
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.current } }), " Current (Dequeued)"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.neighbor } }), " Checking"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.inQueue } }), " In Queue"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.visited } }), " Processed"
+                            ),
+                            React.createElement("div", { className: "flex items-center gap-2" },
+                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.path } }), " Tree Edge"
+                            )
                         )
                     ),
 

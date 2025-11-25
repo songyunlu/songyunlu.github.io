@@ -278,7 +278,7 @@
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
                 /* Top Bar Wrapper */
-                React.createElement("div", { className: "w-full max-w-5xl mb-6 flex flex-col lg:flex-row items-center justify-between gap-6" },
+                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-6" },
                     
                     /* Title (Standalone Left) */
                     React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
@@ -286,22 +286,9 @@
                         React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Binary Search")
                     ),
 
-                    /* Controls (Pill-shaped Container Right) */
-                    React.createElement("div", { className: "flex flex-wrap items-center justify-center gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                    /* Controls (Pill-shaped Container Right) - Changed justify-center to justify-end */
+                    React.createElement("div", { className: "flex flex-wrap items-center justify-end gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
                         
-                        /* Size Slider */
-                        React.createElement("div", { className: "flex items-center gap-3" },
-                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
-                            React.createElement("input", {
-                                type: "range", min: "5", max: "25", step: "1",
-                                value: arraySize,
-                                onChange: (e) => setArraySize(Number(e.target.value)),
-                                disabled: isPlaying,
-                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
-                            }),
-                            React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
-                        ),
-
                         /* Speed Slider */
                         React.createElement("div", { className: "flex items-center gap-3" },
                             React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
@@ -309,7 +296,7 @@
                                 type: "range", min: "100", max: "1900", step: "100",
                                 value: animationSpeed,
                                 onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
                             })
                         ),
 
@@ -339,8 +326,24 @@
                     )
                 ),
 
+                /* New Block: Size Slider (Reverted to Full Width Bar) */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex items-center justify-end shadow-sm" },
+                     /* Size Slider */
+                     React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
+                        React.createElement("input", {
+                            type: "range", min: "5", max: "25", step: "1",
+                            value: arraySize,
+                            onChange: (e) => setArraySize(Number(e.target.value)),
+                            disabled: isPlaying,
+                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                        }),
+                        React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
+                    )
+                ),
+
                 /* Description Box */
-                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-6 flex items-center justify-center shadow-lg" },
+                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center shadow-lg" },
                     React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
                 ),
 
@@ -353,7 +356,7 @@
                         /* Target Display */
                         React.createElement("div", { className: "flex items-center gap-2 px-3 py-1 bg-slate-900/50 rounded-md border border-slate-600" },
                             React.createElement(Target, { size: 14, className: "text-emerald-400" }),
-                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Target (Click Node)"),
+                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Target"),
                             React.createElement("span", { className: "text-sm font-bold text-emerald-400 font-mono" }, target || "--")
                         ),
 
@@ -379,7 +382,7 @@
 
                     /* Array Representation */
                     React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
-                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Representation"),
+                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Representation (Click node to set as Target)"),
                     
                     /* EDITED: Added gap-y-14 for pointer clearance, py-6 for container padding, and removed sm:flex-nowrap to allow wrapping */
                     React.createElement("div", { className: "flex justify-center w-full gap-x-2 gap-y-14 px-4 flex-wrap py-6" },
