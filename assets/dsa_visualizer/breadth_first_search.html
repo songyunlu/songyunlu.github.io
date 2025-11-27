@@ -55,13 +55,18 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Network, CheckCircle2, ZoomIn, ZoomOut, Maximize, Layers } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Network, CheckCircle2, ZoomIn, ZoomOut, Maximize, Layers, Hash, ArrowRight, ArrowLeftRight } from 'lucide-react';
 
         const BFSVisualizer = () => {
             // -- State --
             const [nodeCount, setNodeCount] = useState(10);
             const [edgeDensity, setEdgeDensity] = useState(1.0); 
-            const [animationSpeed, setAnimationSpeed] = useState(1000); 
+            const [animationSpeed, setAnimationSpeed] = useState(1000);
+            
+            // New Graph Mode State
+            const [isWeighted, setIsWeighted] = useState(false);
+            const [isDirected, setIsDirected] = useState(false);
+
             const [graph, setGraph] = useState({ nodes: [], edges: [] });
             const [steps, setSteps] = useState([]);
             const [currentStepIndex, setCurrentStepIndex] = useState(0);
@@ -92,7 +97,7 @@
                 text: '#e2e8f0'
             };
 
-            // -- Physics Layout Logic (Same as template) --
+            // -- Physics Layout Logic --
             const runForceLayout = (nodes, edges, width, height) => {
                 const iterations = 300; 
                 const repulsion = 10000; 
@@ -173,7 +178,7 @@
             };
 
             // -- Graph Logic --
-            const generateGraph = useCallback((count, density) => {
+            const generateGraph = useCallback((count, density, weighted, directed) => {
                 const nodes = [];
                 const edges = [];
 
@@ -186,12 +191,13 @@
                     });
                 }
 
-                // Basic connectivity (Ring/Line)
+                // Basic connectivity (Line) to ensure at least one path exists
                 for(let i=0; i<count-1; i++){
-                    edges.push({ source: i, target: i+1 });
+                    const weight = weighted ? Math.floor(Math.random() * 9) + 1 : null;
+                    edges.push({ source: i, target: i+1, weight });
                 }
                 
-                // Add random edges based on Density
+                // Add random edges
                 const extraEdges = Math.floor(count * density); 
                 let attempts = 0;
                 while(edges.length < (count - 1) + extraEdges && attempts < 300) {
@@ -199,8 +205,17 @@
                     const target = Math.floor(Math.random() * count);
                     attempts++;
                     
-                    if(source !== target && !edges.find(e => (e.source === source && e.target === target) || (e.source === target && e.target === source))) {
-                        edges.push({ source, target });
+                    if(source !== target) {
+                        // Check duplicates
+                        const exists = edges.find(e => 
+                            (e.source === source && e.target === target) || 
+                            (!directed && e.source === target && e.target === source)
+                        );
+
+                        if (!exists) {
+                            const weight = weighted ? Math.floor(Math.random() * 9) + 1 : null;
+                            edges.push({ source, target, weight });
+                        }
                     }
                 }
 
@@ -208,18 +223,17 @@
                 return { nodes, edges };
             }, []);
 
-            // -- BFS ALGORITHM GENERATOR --
-            const generateBFSSteps = (graphData, startNodeId = 0) => {
+            // -- BFS ALGORITHM --
+            const generateBFSSteps = (graphData, startNodeId = 0, directed) => {
                 const stepsLog = [];
                 const { nodes, edges } = graphData;
                 
                 const distances = {};
                 const previous = {};
-                const discovered = new Set(); // Nodes that are in queue or processed
-                const processed = new Set();  // Nodes fully processed (popped from queue)
-                const sptEdges = new Set();   // Edges part of the shortest path tree
+                const discovered = new Set();
+                const processed = new Set();
+                const sptEdges = new Set();
                 
-                // Initialize
                 nodes.forEach(node => {
                     distances[node.id] = Infinity;
                     previous[node.id] = null;
@@ -228,20 +242,18 @@
                 distances[startNodeId] = 0;
                 discovered.add(startNodeId);
                 
-                // Queue for BFS: Stores node IDs
                 const queue = [startNodeId];
 
                 const getNeighbors = (id) => {
                     const neighbors = [];
                     edges.forEach(edge => {
                         if (edge.source === id) neighbors.push(edge.target);
-                        if (edge.target === id) neighbors.push(edge.source);
+                        if (!directed && edge.target === id) neighbors.push(edge.source);
                     });
-                    // Sort by ID for consistent visualization order
                     return neighbors.sort((a,b) => a - b);
                 };
 
-                // Step 0: Initial State
+                // Init Step
                 stepsLog.push({
                     distances: { ...distances },
                     discovered: new Set(discovered),
@@ -254,13 +266,12 @@
                 });
 
                 while (queue.length > 0) {
-                    // 1. Dequeue
                     const u = queue.shift();
                     
                     stepsLog.push({
                         distances: { ...distances },
                         discovered: new Set(discovered),
-                        processed: new Set(processed), // Not yet processed, currently processing
+                        processed: new Set(processed),
                         queue: [...queue],
                         sptEdges: new Set(sptEdges),
                         currentNode: u,
@@ -269,11 +280,9 @@
                         description: `Dequeued Node ${nodes[u].label} (Distance: ${distances[u]}). Exploring neighbors...`
                     });
 
-                    // Get neighbors
                     const neighbors = getNeighbors(u);
 
                     for (let v of neighbors) {
-                        // 2. Check Neighbor
                         stepsLog.push({
                             distances: { ...distances },
                             discovered: new Set(discovered),
@@ -284,17 +293,18 @@
                             checkingNeighbor: v,
                             highlightEdge: { source: u, target: v },
                             type: 'check',
-                            description: `Checking connection to Node ${nodes[v].label}.`
+                            description: `Checking connection from ${nodes[u].label} to ${nodes[v].label}.`
                         });
 
                         if (!discovered.has(v)) {
-                            // 3. Found new node -> Enqueue
                             discovered.add(v);
                             distances[v] = distances[u] + 1;
                             previous[v] = u;
                             queue.push(v);
                             
-                            const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                            // For Directed, key is strictly u-v if we only store one way, 
+                            // but visuals might expect consistency. We'll store formatted string.
+                            const edgeKey = directed ? `${u}-${v}` : `${Math.min(u,v)}-${Math.max(u,v)}`;
                             sptEdges.add(edgeKey);
 
                             stepsLog.push({
@@ -312,7 +322,6 @@
                         }
                     }
 
-                    // 4. Mark Processed
                     processed.add(u);
                     
                     stepsLog.push({
@@ -347,15 +356,15 @@
             // -- Effects --
             useEffect(() => {
                 reset();
-            }, [nodeCount, edgeDensity]); 
+            }, [nodeCount, edgeDensity, isWeighted, isDirected]); 
 
             const reset = () => {
                 setIsPlaying(false);
                 setIsFinished(false);
                 setCurrentStepIndex(0);
-                const newGraph = generateGraph(nodeCount, edgeDensity);
+                const newGraph = generateGraph(nodeCount, edgeDensity, isWeighted, isDirected);
                 setGraph(newGraph);
-                const newSteps = generateBFSSteps(newGraph, 0);
+                const newSteps = generateBFSSteps(newGraph, 0, isDirected);
                 setSteps(newSteps);
             };
 
@@ -466,51 +475,49 @@
             const currentStep = steps[currentStepIndex] || { distances: {}, discovered: new Set(), processed: new Set(), description: "Ready..." };
             
             const getNodeColor = (nodeId) => {
-                // 1. Current Node being processed (Dequeued)
                 if (currentStep.currentNode === nodeId) return COLORS.current;
-                
-                // 2. Neighbor being checked right now
                 if (currentStep.checkingNeighbor === nodeId) return COLORS.neighbor;
-                
-                // 3. Fully Processed (Popped)
                 if (currentStep.processed && currentStep.processed.has(nodeId)) return COLORS.visited;
-                
-                // 4. Discovered (In Queue, Waiting)
                 if (currentStep.discovered && currentStep.discovered.has(nodeId)) return COLORS.inQueue;
-
-                // 5. Unvisited
                 return COLORS.default;
             };
 
             const getEdgeColor = (u, v) => {
-                // Shortest Path Tree Edges
-                if (currentStep.sptEdges) {
-                    const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
-                    if (currentStep.sptEdges.has(edgeKey)) {
-                        return COLORS.path;
-                    }
+                // Determine key based on directionality
+                let edgeKey = isDirected ? `${u}-${v}` : `${Math.min(u,v)}-${Math.max(u,v)}`;
+                
+                // For directed, we must check exact match. For undirected, check both ways.
+                if (currentStep.sptEdges && currentStep.sptEdges.has(edgeKey)) {
+                    return COLORS.path;
                 }
-                // Currently Highlighted Edge (checking neighbor)
+                
                 const h = currentStep.highlightEdge;
                 if (h) {
-                    if ((h.source === u && h.target === v) || (h.source === v && h.target === u)) {
-                        return COLORS.edgeActive;
+                    if (isDirected) {
+                         if (h.source === u && h.target === v) return COLORS.edgeActive;
+                    } else {
+                         if ((h.source === u && h.target === v) || (h.source === v && h.target === u)) return COLORS.edgeActive;
                     }
                 }
                 return COLORS.edgeDefault;
             };
 
             const getEdgeWidth = (u, v) => {
-                if (currentStep.sptEdges) {
-                    const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
-                    if (currentStep.sptEdges.has(edgeKey)) {
-                        return 4; 
+                const h = currentStep.highlightEdge;
+                let isHighlight = false;
+                if (h) {
+                    if (isDirected) {
+                        if (h.source === u && h.target === v) isHighlight = true;
+                    } else {
+                        if ((h.source === u && h.target === v) || (h.source === v && h.target === u)) isHighlight = true;
                     }
                 }
-                const h = currentStep.highlightEdge;
-                if (h && ((h.source === u && h.target === v) || (h.source === v && h.target === u))) {
-                    return 6;
-                }
+
+                if (isHighlight) return 6;
+                
+                let edgeKey = isDirected ? `${u}-${v}` : `${Math.min(u,v)}-${Math.max(u,v)}`;
+                if (currentStep.sptEdges && currentStep.sptEdges.has(edgeKey)) return 4;
+                
                 return 2;
             };
 
@@ -518,7 +525,6 @@
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
                 
                 /* Top Control Bar */
-                /* CHANGED: mb-2 to mb-4 for consistent spacing */
                 React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
                     
                     /* 1. Title & Icon */
@@ -531,7 +537,6 @@
                     ),
 
                     /* 2. Control Pill (Right) */
-                    /* CHANGED: justify-center -> justify-end to align controls to the right on resize */
                     React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-2 px-4 sm:px-6 flex flex-wrap items-center justify-end gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
                         
                         /* Speed Slider */
@@ -571,9 +576,8 @@
                     )
                 ),
 
-                /* New Control Bar (Size & Density) - Aligned Right with Increased Height */
-                /* Note: mb-4 matches the header margin now */
-                React.createElement("div", { className: "w-full max-w-5xl mb-4 bg-slate-800 border border-slate-700 rounded-xl p-4 flex items-center justify-end gap-8 shadow-sm" },
+                /* New Control Bar (Nodes, Density + Buttons) */
+                React.createElement("div", { className: "w-full max-w-5xl mb-4 bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-wrap items-center justify-end gap-6 shadow-sm" },
                     
                     /* Nodes Slider */
                     React.createElement("div", { className: "flex items-center gap-3" },
@@ -599,6 +603,44 @@
                             className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
                         }),
                         React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4 text-right" }, edgeDensity)
+                    ),
+
+                    /* Vertical Separator */
+                    React.createElement("div", { className: "h-8 w-px bg-slate-700 mx-2 hidden sm:block" }),
+
+                    /* Graph Mode Buttons */
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        /* Weighted Toggle */
+                        React.createElement("button", {
+                            onClick: () => !isPlaying && setIsWeighted(!isWeighted),
+                            disabled: isPlaying,
+                            className: `
+                                px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 border transition-all
+                                ${isWeighted 
+                                    ? 'bg-cyan-950/50 text-cyan-400 border-cyan-800 shadow-[0_0_10px_rgba(34,211,238,0.1)]' 
+                                    : 'bg-transparent text-slate-400 border-slate-600 hover:bg-slate-700 hover:text-slate-200'}
+                                ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}
+                            `
+                        },
+                            React.createElement(Hash, { size: 14 }),
+                            "Weighted"
+                        ),
+
+                        /* Directed Toggle */
+                        React.createElement("button", {
+                            onClick: () => !isPlaying && setIsDirected(!isDirected),
+                            disabled: isPlaying,
+                            className: `
+                                px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center gap-2 border transition-all
+                                ${isDirected 
+                                    ? 'bg-purple-950/50 text-purple-400 border-purple-800 shadow-[0_0_10px_rgba(168,85,247,0.1)]' 
+                                    : 'bg-transparent text-slate-400 border-slate-600 hover:bg-slate-700 hover:text-slate-200'}
+                                ${isPlaying ? 'opacity-50 cursor-not-allowed' : ''}
+                            `
+                        },
+                            isDirected ? React.createElement(ArrowRight, { size: 14 }) : React.createElement(ArrowLeftRight, { size: 14 }),
+                            "Directed"
+                        )
                     )
                 ),
 
@@ -610,13 +652,11 @@
                 /* Main Content Area */
                 React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 sm:p-6 flex flex-col gap-6" },
                     
-                    /* Legend Row (Sliders removed from here) */
+                    /* Legend */
                     React.createElement("div", { className: "flex justify-end items-center border-b border-slate-700 pb-4" },
-                        
-                        /* Legend */
                         React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300" },
                             React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.current } }), " Current (Dequeued)"
+                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.current } }), " Current"
                             ),
                             React.createElement("div", { className: "flex items-center gap-2" },
                                 React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.neighbor } }), " Checking"
@@ -628,7 +668,7 @@
                                 React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.visited } }), " Processed"
                             ),
                             React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.path } }), " Tree Edge"
+                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.path } }), " Path"
                             )
                         )
                     ),
@@ -654,6 +694,26 @@
 
                         /* SVG */
                         React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full" },
+                            /* Arrow Marker Definition */
+                            React.createElement("defs", null,
+                                React.createElement("marker", {
+                                    id: "arrowhead",
+                                    markerWidth: "10", markerHeight: "7",
+                                    refX: "28", refY: "3.5", // Optimized refX for node radius
+                                    orient: "auto"
+                                },
+                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeDefault })
+                                ),
+                                React.createElement("marker", {
+                                    id: "arrowhead-active",
+                                    markerWidth: "10", markerHeight: "7",
+                                    refX: "28", refY: "3.5",
+                                    orient: "auto"
+                                },
+                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeActive })
+                                )
+                            ),
+                            
                             React.createElement("g", { 
                                 style: { 
                                     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -666,15 +726,32 @@
                                     const s = graph.nodes.find(n => n.id === edge.source);
                                     const t = graph.nodes.find(n => n.id === edge.target);
                                     if (!s || !t) return null;
+                                    
                                     const color = getEdgeColor(edge.source, edge.target);
                                     const width = getEdgeWidth(edge.source, edge.target);
+                                    
+                                    // Use active marker if edge is active, otherwise default
+                                    const isHighlight = color === COLORS.edgeActive;
+                                    const markerUrl = isDirected ? (isHighlight ? "url(#arrowhead-active)" : "url(#arrowhead)") : undefined;
+
                                     return React.createElement("g", { key: `edge-${idx}`, className: "pointer-events-none" },
                                         React.createElement("line", {
                                             x1: s.x, y1: s.y, x2: t.x, y2: t.y,
                                             stroke: color, strokeWidth: width,
-                                            className: "line-transition"
-                                        })
-                                        /* No Weights in BFS */
+                                            className: "line-transition",
+                                            markerEnd: markerUrl
+                                        }),
+                                        /* Edge Weights (if enabled) */
+                                        isWeighted && React.createElement("g", null,
+                                             React.createElement("circle", {
+                                                 cx: (s.x + t.x) / 2, cy: (s.y + t.y) / 2,
+                                                 r: 10, fill: "#0f172a", stroke: color, strokeWidth: 1
+                                             }),
+                                             React.createElement("text", {
+                                                 x: (s.x + t.x) / 2, y: (s.y + t.y) / 2,
+                                                 dy: 4, textAnchor: "middle", fill: "#94a3b8", fontSize: 10, fontWeight: "bold"
+                                             }, edge.weight)
+                                        )
                                     );
                                 }),
 
@@ -737,7 +814,7 @@
                         )
                     ),
 
-                    /* Queue Component (NEW) */
+                    /* Queue Component */
                     React.createElement("div", { className: "flex flex-col gap-2" },
                         React.createElement("div", { className: "flex justify-between items-baseline" },
                             React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "Queue (FIFO)"),

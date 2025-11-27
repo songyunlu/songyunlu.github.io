@@ -55,12 +55,14 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitBranch, ZoomIn, ZoomOut, Maximize, Layers, ArrowRight } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitBranch, ZoomIn, ZoomOut, Maximize, Layers, ArrowRight, Hash } from 'lucide-react';
 
         const DFSVisualizer = () => {
             // -- State --
             const [nodeCount, setNodeCount] = useState(12);
             const [density, setDensity] = useState(0.5);
+            const [isWeighted, setIsWeighted] = useState(false);
+            const [isDirected, setIsDirected] = useState(false);
             const [animationSpeed, setAnimationSpeed] = useState(1000); 
             const [graph, setGraph] = useState({ nodes: [], edges: [] });
             const [steps, setSteps] = useState([]);
@@ -174,7 +176,7 @@
             };
 
             // -- Graph Logic --
-            const generateGraph = useCallback((count, currentDensity) => {
+            const generateGraph = useCallback((count, currentDensity, weighted) => {
                 const nodes = [];
                 const edges = [];
 
@@ -187,10 +189,11 @@
                     });
                 }
 
-                // Generate a simpler structure for DFS (more tree-like with some cycles)
-                // Connect i to i+1 to ensure connectivity
+                const getWeight = () => weighted ? Math.floor(Math.random() * 9) + 1 : null;
+
+                // Ensure connectivity
                 for(let i=0; i<count-1; i++){
-                    edges.push({ source: i, target: i+1 });
+                    edges.push({ source: i, target: i+1, weight: getWeight() });
                 }
                 
                 // Add random edges
@@ -202,7 +205,7 @@
                     attempts++;
                     
                     if(source !== target && !edges.find(e => (e.source === source && e.target === target) || (e.source === target && e.target === source))) {
-                        edges.push({ source, target });
+                        edges.push({ source, target, weight: getWeight() });
                     }
                 }
 
@@ -210,7 +213,7 @@
                 return { nodes, edges };
             }, []);
 
-            const generateDFSSteps = (graphData, startNodeId = 0) => {
+            const generateDFSSteps = (graphData, startNodeId = 0, directed) => {
                 const stepsLog = [];
                 const { nodes, edges } = graphData;
                 
@@ -219,7 +222,9 @@
                 nodes.forEach(n => adj[n.id] = []);
                 edges.forEach(e => {
                     adj[e.source].push(e.target);
-                    adj[e.target].push(e.source);
+                    if (!directed) {
+                        adj[e.target].push(e.source);
+                    }
                 });
                 // Sort neighbors by ID for deterministic behavior
                 Object.keys(adj).forEach(k => adj[k].sort((a, b) => a - b));
@@ -267,7 +272,7 @@
                             stack.push(neighbor);
                             
                             // Mark edge as part of tree
-                            const edgeKey = `${Math.min(current, neighbor)}-${Math.max(current, neighbor)}`;
+                            const edgeKey = directed ? `${current}-${neighbor}` : `${Math.min(current, neighbor)}-${Math.max(current, neighbor)}`;
                             traversalEdges.add(edgeKey);
 
                             stepsLog.push({
@@ -323,15 +328,15 @@
             // -- Effects --
             useEffect(() => {
                 reset();
-            }, [nodeCount, density]);
+            }, [nodeCount, density, isWeighted, isDirected]);
 
             const reset = () => {
                 setIsPlaying(false);
                 setIsFinished(false);
                 setCurrentStepIndex(0);
-                const newGraph = generateGraph(nodeCount, density);
+                const newGraph = generateGraph(nodeCount, density, isWeighted);
                 setGraph(newGraph);
-                const newSteps = generateDFSSteps(newGraph, 0);
+                const newSteps = generateDFSSteps(newGraph, 0, isDirected);
                 setSteps(newSteps);
             };
 
@@ -462,19 +467,29 @@
             };
 
             const getEdgeColor = (u, v) => {
-                const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                const edgeKey = isDirected ? `${u}-${v}` : `${Math.min(u,v)}-${Math.max(u,v)}`;
+                const undirectedKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
                 
                 // Highlight specific edge in Explore or Backtrack
                 const h = currentStep.highlightEdge;
                 if (h) {
-                    if ((h.source === u && h.target === v) || (h.source === v && h.target === u)) {
-                        return currentStep.type === 'backtrack' ? COLORS.edgeBacktrack : COLORS.edgeTraverse;
+                    // Directed check
+                    if (isDirected) {
+                         if (h.source === u && h.target === v) return currentStep.type === 'backtrack' ? COLORS.edgeBacktrack : COLORS.edgeTraverse;
+                    } else {
+                        if ((h.source === u && h.target === v) || (h.source === v && h.target === u)) {
+                            return currentStep.type === 'backtrack' ? COLORS.edgeBacktrack : COLORS.edgeTraverse;
+                        }
                     }
                 }
 
                 // Part of the Traversal Tree
-                if (currentStep.traversalEdges && currentStep.traversalEdges.has(edgeKey)) {
-                    return COLORS.edgeTraverse;
+                if (currentStep.traversalEdges) {
+                    if (isDirected) {
+                        if (currentStep.traversalEdges.has(`${u}-${v}`)) return COLORS.edgeTraverse;
+                    } else {
+                        if (currentStep.traversalEdges.has(undirectedKey)) return COLORS.edgeTraverse;
+                    }
                 }
 
                 return COLORS.edgeDefault;
@@ -485,9 +500,15 @@
                 if (h && ((h.source === u && h.target === v) || (h.source === v && h.target === u))) {
                     return 6;
                 }
-                const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
-                if (currentStep.traversalEdges && currentStep.traversalEdges.has(edgeKey)) {
-                    return 4;
+                const edgeKey = isDirected ? `${u}-${v}` : `${Math.min(u,v)}-${Math.max(u,v)}`;
+                const undirectedKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                
+                if (currentStep.traversalEdges) {
+                     if (isDirected) {
+                        if (currentStep.traversalEdges.has(`${u}-${v}`)) return 4;
+                    } else {
+                        if (currentStep.traversalEdges.has(undirectedKey)) return 4;
+                    }
                 }
                 return 2;
             };
@@ -510,7 +531,7 @@
                     /* Controls */
                     React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-end gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
                         
-                        /* Speed Slider (Remaining in Top Bar) */
+                        /* Speed Slider */
                         React.createElement("div", { className: "flex items-center gap-2" },
                             React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
                             React.createElement("input", {
@@ -544,8 +565,8 @@
                     )
                 ),
 
-                /* Settings Bar (Nodes & Density) - Reduced Margin (mb-4) */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex flex-wrap items-center justify-end gap-6 sm:gap-10 shadow-sm z-10" },
+                /* Settings Bar (Nodes, Density, Buttons) */
+                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex flex-wrap items-center justify-end gap-4 sm:gap-8 shadow-sm z-10" },
                     
                     /* Nodes Slider */
                     React.createElement("div", { className: "flex items-center gap-3" },
@@ -571,6 +592,37 @@
                             className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
                         }),
                         React.createElement("span", { className: "text-sm text-slate-200 font-mono font-medium min-w-[1.5rem] text-center" }, density.toFixed(1))
+                    ),
+
+                    /* Divider */
+                    React.createElement("div", { className: "h-8 w-px bg-slate-700 mx-2 hidden sm:block" }),
+
+                    /* Buttons Group */
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        /* Weighted Button */
+                        React.createElement("button", {
+                            onClick: () => setIsWeighted(!isWeighted),
+                            className: `flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
+                                isWeighted 
+                                ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/50" 
+                                : "bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                            }`
+                        }, 
+                            React.createElement(Hash, { size: 14 }),
+                            "Weighted"
+                        ),
+                        /* Directed Button */
+                         React.createElement("button", {
+                            onClick: () => setIsDirected(!isDirected),
+                            className: `flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
+                                isDirected 
+                                ? "bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/50" 
+                                : "bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                            }`
+                        }, 
+                            React.createElement(ArrowRight, { size: 14 }),
+                            "Directed"
+                        )
                     )
                 ),
 
@@ -623,6 +675,34 @@
 
                         /* SVG */
                         React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full" },
+                            /* Definitions for Markers (Arrowheads) */
+                            React.createElement("defs", null,
+                                React.createElement("marker", {
+                                    id: "arrowhead",
+                                    markerWidth: "10", markerHeight: "7",
+                                    refX: "28", refY: "3.5",
+                                    orient: "auto"
+                                },
+                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeDefault })
+                                ),
+                                React.createElement("marker", {
+                                    id: "arrowhead-traverse",
+                                    markerWidth: "10", markerHeight: "7",
+                                    refX: "28", refY: "3.5",
+                                    orient: "auto"
+                                },
+                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeTraverse })
+                                ),
+                                React.createElement("marker", {
+                                    id: "arrowhead-backtrack",
+                                    markerWidth: "10", markerHeight: "7",
+                                    refX: "28", refY: "3.5",
+                                    orient: "auto"
+                                },
+                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeBacktrack })
+                                )
+                            ),
+
                             React.createElement("g", { 
                                 style: { 
                                     transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -637,13 +717,34 @@
                                     if (!s || !t) return null;
                                     const color = getEdgeColor(edge.source, edge.target);
                                     const width = getEdgeWidth(edge.source, edge.target);
-                                    return React.createElement("line", {
-                                        key: `edge-${idx}`,
-                                        x1: s.x, y1: s.y, x2: t.x, y2: t.y,
-                                        stroke: color, strokeWidth: width,
-                                        strokeLinecap: "round",
-                                        className: "line-transition pointer-events-none"
-                                    });
+                                    
+                                    // Determine Marker URL
+                                    let markerUrl = isDirected ? "url(#arrowhead)" : undefined;
+                                    if (isDirected) {
+                                        if (color === COLORS.edgeTraverse) markerUrl = "url(#arrowhead-traverse)";
+                                        if (color === COLORS.edgeBacktrack) markerUrl = "url(#arrowhead-backtrack)";
+                                    }
+
+                                    return React.createElement("g", { key: `edge-${idx}`, className: "pointer-events-none" }, 
+                                        React.createElement("line", {
+                                            x1: s.x, y1: s.y, x2: t.x, y2: t.y,
+                                            stroke: color, strokeWidth: width,
+                                            strokeLinecap: "round",
+                                            markerEnd: markerUrl,
+                                            className: "line-transition"
+                                        }),
+                                        /* Weight Label */
+                                        (isWeighted && edge.weight) && React.createElement("g", null, 
+                                            React.createElement("circle", {
+                                                cx: (s.x + t.x) / 2, cy: (s.y + t.y) / 2,
+                                                r: 9, fill: "#1e293b", stroke: color, strokeWidth: 1
+                                            }),
+                                            React.createElement("text", {
+                                                x: (s.x + t.x) / 2, y: (s.y + t.y) / 2,
+                                                dy: 3, textAnchor: "middle", fill: "#94a3b8", fontSize: 10, fontWeight: "bold"
+                                            }, edge.weight)
+                                        )
+                                    );
                                 }),
 
                                 /* Nodes */
