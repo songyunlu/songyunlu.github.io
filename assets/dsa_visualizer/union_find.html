@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Union-Find Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+            overflow-x: hidden; /* Prevent horizontal scroll on the body */
+        }
+
+        /* Tree connector lines */
+        .tree-line {
+            transition: all 0.3s ease;
+        }
+
+        /* Input number spin button hide */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fade-in 0.3s ease-out forwards;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipForward, RotateCcw, Network, Search, Link2, Settings, Activity, Zap } from 'lucide-react';
+
+        const UnionFindVisualizer = () => {
+            // -- State --
+            const [size, setSize] = useState(10);
+            const [animationSpeed, setAnimationSpeed] = useState(500); 
+            
+            // Data Structure State
+            // parents[i] = parent of i. If parents[i] === i, it's a root.
+            const [parents, setParents] = useState([]);
+            const [ranks, setRanks] = useState([]); // Height/Rank for optimization
+            
+            // Inputs
+            const [nodeA, setNodeA] = useState(0);
+            const [nodeB, setNodeB] = useState(1);
+            const [activeInput, setActiveInput] = useState('A'); // Track which input is active for click selection
+            
+            // Options
+            const [usePathCompression, setUsePathCompression] = useState(true);
+            const [useUnionByRank, setUseUnionByRank] = useState(true);
+
+            // Animation State
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-700 border-slate-600 text-slate-200',
+                visiting: 'bg-amber-600 border-amber-400 text-amber-50 shadow-[0_0_15px_rgba(245,158,11,0.5)]', // Traversing
+                root: 'bg-emerald-600 border-emerald-400 text-emerald-50 shadow-[0_0_15px_rgba(16,185,129,0.5)]', // Found root
+                merged: 'bg-indigo-600 border-indigo-400 text-indigo-50 shadow-[0_0_15px_rgba(99,102,241,0.5)]', // Changed/Merged
+                selected: 'bg-pink-600 border-pink-400 text-pink-50', // Selected inputs
+            };
+
+            // -- Initialization --
+            useEffect(() => {
+                reset();
+            }, [size]);
+
+            const reset = () => {
+                const newParents = Array.from({ length: size }, (_, i) => i);
+                const newRanks = Array(size).fill(0);
+                
+                setParents(newParents);
+                setRanks(newRanks);
+                setSteps([{
+                    parents: [...newParents],
+                    ranks: [...newRanks],
+                    highlight: {}, // { index: 'type' } e.g. { 0: 'visiting' }
+                    description: "Initial State: Each node is its own parent (disjoint sets)."
+                }]);
+                setCurrentStepIndex(0);
+                setIsPlaying(false);
+                setActiveInput('A');
+                
+                // Reset inputs to valid range
+                if (nodeA >= size) setNodeA(size - 1);
+                if (nodeB >= size) setNodeB(0);
+            };
+            
+            // Handle clicking a node in the visualizer
+            const handleNodeClick = (index) => {
+                if (isPlaying) return;
+                
+                if (activeInput === 'A') {
+                    setNodeA(index);
+                    setActiveInput('B'); // Auto-advance to B
+                } else {
+                    setNodeB(index);
+                    setActiveInput('A'); // Loop back to A
+                }
+            };
+
+            // -- Algorithms --
+
+            // Helper to create a step snapshot
+            const createStep = (p, r, h, d) => ({
+                parents: [...p],
+                ranks: [...r],
+                highlight: { ...h },
+                description: d
+            });
+
+            // Find Operation with Animation Steps
+            // Returns { root, newSteps }
+            const generateFindSteps = (startNode, currentParents, currentRanks, label = "") => {
+                const localSteps = [];
+                let curr = startNode;
+                const path = [];
+
+                // 1. Traversal
+                while (true) {
+                    path.push(curr);
+                    localSteps.push(createStep(
+                        currentParents, currentRanks,
+                        { [curr]: 'visiting' },
+                        `${label}Find(${startNode}): Visiting node ${curr}. Parent is ${currentParents[curr]}.`
+                    ));
+
+                    if (currentParents[curr] === curr) {
+                        localSteps.push(createStep(
+                            currentParents, currentRanks,
+                            { [curr]: 'root' },
+                            `${label}Find(${startNode}): Found root ${curr}.`
+                        ));
+                        break;
+                    }
+                    curr = currentParents[curr];
+                }
+
+                const root = curr;
+
+                // 2. Path Compression (if enabled)
+                if (usePathCompression) {
+                    let madeChanges = false;
+                    const parentsCopy = [...currentParents];
+                    
+                    // Filter out the root itself and immediate children of root from compression
+                    const toCompress = path.filter(node => node !== root && parentsCopy[node] !== root);
+                    
+                    if (toCompress.length > 0) {
+                        localSteps.push(createStep(
+                            parentsCopy, currentRanks,
+                            path.reduce((acc, n) => ({...acc, [n]: 'visiting'}), {[root]: 'root'}),
+                            `${label}Path Compression: Repointing nodes on path directly to root ${root}.`
+                        ));
+
+                        toCompress.forEach(node => {
+                            parentsCopy[node] = root;
+                        });
+
+                        localSteps.push(createStep(
+                            parentsCopy, currentRanks,
+                            toCompress.reduce((acc, n) => ({...acc, [n]: 'merged'}), {[root]: 'root'}),
+                            `${label}Path Compression: Structure updated.`
+                        ));
+                        madeChanges = true;
+                    }
+                    return { root, steps: localSteps, finalParents: parentsCopy };
+                }
+
+                return { root, steps: localSteps, finalParents: currentParents };
+            };
+
+            const handleFind = () => {
+                if (nodeA >= size || nodeA < 0) return;
+                
+                const currentParents = [...parents]; 
+                
+                const { steps: findSteps } = generateFindSteps(nodeA, currentParents, [...ranks]);
+                
+                // Add a cleanup 'Ready' step
+                findSteps.push(createStep(
+                    findSteps[findSteps.length-1].parents,
+                    [...ranks],
+                    {},
+                    `Find(${nodeA}) Complete.`
+                ));
+
+                setSteps(findSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+            };
+
+            const handleUnion = () => {
+                if (nodeA === nodeB || nodeA >= size || nodeB >= size) return;
+
+                let currentParents = [...parents];
+                let currentRanks = [...ranks];
+                let allSteps = [];
+
+                // Step 0: Highlight targets
+                allSteps.push(createStep(
+                    currentParents, currentRanks,
+                    { [nodeA]: 'selected', [nodeB]: 'selected' },
+                    `Union(${nodeA}, ${nodeB}): Starting Union operation.`
+                ));
+
+                // 1. Find Root A
+                const resultA = generateFindSteps(nodeA, currentParents, currentRanks, "Step 1 (Find A): ");
+                allSteps = [...allSteps, ...resultA.steps];
+                currentParents = resultA.finalParents; 
+                const rootA = resultA.root;
+
+                // 2. Find Root B
+                const resultB = generateFindSteps(nodeB, currentParents, currentRanks, "Step 2 (Find B): ");
+                allSteps = [...allSteps, ...resultB.steps];
+                currentParents = resultB.finalParents;
+                const rootB = resultB.root;
+
+                // 3. Union Logic
+                if (rootA === rootB) {
+                    allSteps.push(createStep(
+                        currentParents, currentRanks,
+                        { [rootA]: 'root' },
+                        `Nodes ${nodeA} and ${nodeB} are already in the same set (Root ${rootA}). No changes.`
+                    ));
+                } else {
+                    allSteps.push(createStep(
+                        currentParents, currentRanks,
+                        { [rootA]: 'visiting', [rootB]: 'visiting' },
+                        `Roots are different (${rootA} vs ${rootB}). Proceeding to merge.`
+                    ));
+
+                    if (useUnionByRank) {
+                        if (currentRanks[rootA] < currentRanks[rootB]) {
+                            currentParents[rootA] = rootB;
+                            allSteps.push(createStep(
+                                currentParents, currentRanks,
+                                { [rootA]: 'merged', [rootB]: 'root' },
+                                `Rank(${rootA}) < Rank(${rootB}). ${rootA} becomes child of ${rootB}.`
+                            ));
+                        } else if (currentRanks[rootA] > currentRanks[rootB]) {
+                            currentParents[rootB] = rootA;
+                            allSteps.push(createStep(
+                                currentParents, currentRanks,
+                                { [rootB]: 'merged', [rootA]: 'root' },
+                                `Rank(${rootA}) > Rank(${rootB}). ${rootB} becomes child of ${rootA}.`
+                            ));
+                        } else {
+                            currentParents[rootB] = rootA;
+                            currentRanks[rootA] += 1;
+                            allSteps.push(createStep(
+                                currentParents, currentRanks,
+                                { [rootB]: 'merged', [rootA]: 'root' },
+                                `Ranks are equal. ${rootB} becomes child of ${rootA}, and Rank(${rootA}) increases.`
+                            ));
+                        }
+                    } else {
+                        // Naive Union: Always attach B to A (or A to B)
+                        currentParents[rootB] = rootA;
+                        allSteps.push(createStep(
+                            currentParents, currentRanks,
+                            { [rootB]: 'merged', [rootA]: 'root' },
+                            `Basic Union: ${rootB} becomes child of ${rootA}.`
+                        ));
+                    }
+                }
+
+                allSteps.push(createStep(
+                    currentParents, currentRanks,
+                    {},
+                    `Union(${nodeA}, ${nodeB}) Complete.`
+                ));
+
+                setSteps(allSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+            };
+
+            // -- Playback Effect --
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                // Commit final state
+                                const lastStep = steps[steps.length - 1];
+                                setParents(lastStep.parents);
+                                setRanks(lastStep.ranks);
+                                return prev;
+                            }
+                        });
+                    }, 2000 - animationSpeed);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps, animationSpeed]);
+
+
+            // -- Rendering Logic (The Forest Layout) --
+            const currentStep = steps[currentStepIndex] || { parents, ranks, highlight: {}, description: "Ready" };
+            const displayParents = currentStep.parents;
+
+            const getNodeColor = (index) => {
+                const type = currentStep.highlight[index];
+                if (type && COLORS[type]) return COLORS[type];
+                return COLORS.default;
+            };
+
+            const calculateLayout = () => {
+                const dataSize = displayParents.length;
+                const children = Array.from({ length: dataSize }, () => []);
+                const roots = [];
+                
+                displayParents.forEach((p, i) => {
+                    if (p === i) roots.push(i);
+                    else if (children[p]) children[p].push(i);
+                });
+
+                const positions = {};
+                const levelHeight = 70;
+                const nodeSize = 50; 
+                const nodeGap = 20;
+
+                const getSubtreeWidth = (node) => {
+                    if (!children[node] || children[node].length === 0) return 1;
+                    return children[node].reduce((sum, child) => sum + getSubtreeWidth(child), 0);
+                };
+
+                const assignPositions = (node, depth, startX) => {
+                    const myWidthUnits = getSubtreeWidth(node);
+                    const totalWidthPx = myWidthUnits * (nodeSize + nodeGap);
+                    
+                    const x = startX + totalWidthPx / 2;
+                    const y = depth * levelHeight + 50;
+
+                    positions[node] = { x, y };
+
+                    let currentChildX = startX;
+                    if (children[node]) {
+                        children[node].forEach(child => {
+                            const childWidthUnits = getSubtreeWidth(child);
+                            assignPositions(child, depth + 1, currentChildX);
+                            currentChildX += childWidthUnits * (nodeSize + nodeGap);
+                        });
+                    }
+                };
+
+                let currentTreeX = 0;
+                roots.forEach(root => {
+                    const rootWidthUnits = getSubtreeWidth(root);
+                    assignPositions(root, 0, currentTreeX);
+                    currentTreeX += (rootWidthUnits * (nodeSize + nodeGap)) + 40;
+                });
+
+                return { positions, totalWidth: currentTreeX };
+            };
+
+            const renderForest = () => {
+                const { positions, totalWidth } = calculateLayout();
+                
+                const lines = [];
+                displayParents.forEach((parent, child) => {
+                    if (parent !== child) {
+                        const start = positions[child];
+                        const end = positions[parent];
+                        if (start && end) {
+                            const dx = end.x - start.x;
+                            const dy = end.y - start.y;
+                            const angle = Math.atan2(dy, dx);
+                            const r = 24; 
+                            
+                            const x1 = start.x + Math.cos(angle) * r;
+                            const y1 = start.y + Math.sin(angle) * r;
+                            const x2 = end.x - Math.cos(angle) * r;
+                            const y2 = end.y - Math.sin(angle) * r;
+
+                            lines.push(
+                                React.createElement("g", { key: `link-${child}-${parent}` },
+                                    React.createElement("line", {
+                                        x1: x1, y1: y1, x2: x2, y2: y2,
+                                        stroke: "#475569", strokeWidth: "2",
+                                        markerEnd: "url(#arrowhead)",
+                                        className: "tree-line"
+                                    })
+                                )
+                            );
+                        }
+                    }
+                });
+
+                const nodes = Array.from({ length: displayParents.length }, (_, i) => {
+                    const pos = positions[i];
+                    if (!pos) return null;
+                    const colorClass = getNodeColor(i);
+                    
+                    const isSelectedA = !isPlaying && nodeA === i;
+                    const isSelectedB = !isPlaying && nodeB === i;
+                    const borderClass = isSelectedA ? "ring-2 ring-pink-500 ring-offset-2 ring-offset-slate-900" : 
+                                      isSelectedB ? "ring-2 ring-cyan-500 ring-offset-2 ring-offset-slate-900" : "";
+
+                    return React.createElement("div", {
+                        key: `node-${i}`,
+                        onClick: () => handleNodeClick(i),
+                        className: `absolute flex flex-col items-center justify-center transition-all duration-500 ease-in-out z-10 cursor-pointer hover:scale-110`,
+                        style: { left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)' }
+                    },
+                        React.createElement("div", {
+                            className: `w-12 h-12 rounded-full flex items-center justify-center font-bold border-2 shadow-lg transition-colors duration-300 ${colorClass} ${borderClass}`
+                        }, i),
+                        useUnionByRank && React.createElement("div", {
+                            className: "absolute -top-2 -right-2 w-5 h-5 bg-slate-800 text-slate-400 text-[10px] rounded-full flex items-center justify-center border border-slate-600 shadow-sm"
+                        }, currentStep.ranks[i])
+                    );
+                });
+
+                return React.createElement("div", { 
+                    className: "relative w-full overflow-auto custom-scrollbar bg-slate-900/50 rounded-lg border border-slate-800 flex",
+                    style: { height: '400px' } 
+                },
+                    React.createElement("div", {
+                        className: "relative h-full transition-all duration-300 m-auto",
+                        style: { width: Math.max(totalWidth, 100) + 'px', minHeight: '100%' }
+                    },
+                        React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                        
+                        React.createElement("svg", { className: "absolute top-0 left-0 w-full h-full pointer-events-none z-0" },
+                            React.createElement("defs", null,
+                                React.createElement("marker", {
+                                    id: "arrowhead", markerWidth: "10", markerHeight: "7", 
+                                    refX: "9", refY: "3.5", orient: "auto"
+                                },
+                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: "#475569" })
+                                )
+                            ),
+                            lines
+                        ),
+                        nodes
+                    )
+                );
+            };
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-2 sm:p-4" },
+                
+                /* Title - Now Full Width Responsive */
+                React.createElement("div", { className: "w-full max-w-full mb-6 flex items-center gap-3 justify-start" },
+                    React.createElement(Network, { size: 32, className: "text-indigo-400" }),
+                    React.createElement("div", null,
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 tracking-tight" }, "Union-Find"),
+                        React.createElement("p", { className: "text-xs text-slate-500 font-mono hidden sm:block" }, "Disjoint Set Union (DSU)")
+                    )
+                ),
+
+                /* Main Layout: 2 Columns - Full Width */
+                React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-full items-start" },
+                    
+                    /* Sidebar (Left) - Fixed Width on Desktop, Full on Mobile */
+                    React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
+                        
+                        /* Settings Card */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                React.createElement(Settings, { size: 14 }), "Settings"
+                            ),
+                            
+                            /* Size Slider */
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("div", { className: "flex justify-between items-center" },
+                                    React.createElement("span", { className: "text-xs text-slate-400" }, "Forest Size"),
+                                    React.createElement("span", { className: "text-xs font-mono text-indigo-300 bg-indigo-900/30 px-2 py-0.5 rounded" }, size)
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: "5", max: "20", step: "1",
+                                    value: size,
+                                    onChange: (e) => setSize(Number(e.target.value)),
+                                    disabled: isPlaying,
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                                })
+                            ),
+                            
+                            /* Toggles */
+                            React.createElement("div", { className: "flex flex-col gap-3" },
+                                React.createElement("label", { className: "flex items-center justify-between cursor-pointer group" },
+                                    React.createElement("span", { className: "text-sm text-slate-300 group-hover:text-white transition-colors" }, "Path Compression"),
+                                    React.createElement("input", { 
+                                        type: "checkbox", checked: usePathCompression, 
+                                        onChange: (e) => !isPlaying && setUsePathCompression(e.target.checked),
+                                        disabled: isPlaying,
+                                        className: "accent-indigo-500 w-4 h-4 rounded focus:ring-0 disabled:opacity-50" 
+                                    })
+                                ),
+                                React.createElement("label", { className: "flex items-center justify-between cursor-pointer group" },
+                                    React.createElement("span", { className: "text-sm text-slate-300 group-hover:text-white transition-colors" }, "Union By Rank"),
+                                    React.createElement("input", { 
+                                        type: "checkbox", checked: useUnionByRank, 
+                                        onChange: (e) => !isPlaying && setUseUnionByRank(e.target.checked),
+                                        disabled: isPlaying,
+                                        className: "accent-indigo-500 w-4 h-4 rounded focus:ring-0 disabled:opacity-50" 
+                                    })
+                                )
+                            )
+                        ),
+
+                        /* Actions Card */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                             React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-2" },
+                                React.createElement(Zap, { size: 14 }), "Actions"
+                            ),
+
+                             /* Inputs Group */
+                             React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                /* Input A */
+                                React.createElement("div", { 
+                                    className: `flex flex-1 items-center justify-center bg-slate-900 rounded-lg px-2 py-2 border ${activeInput === 'A' ? 'border-pink-500' : 'border-slate-700'} transition-colors cursor-pointer`,
+                                    onClick: () => setActiveInput('A')
+                                },
+                                    React.createElement("span", { className: "text-slate-500 text-xs font-bold mr-2" }, "A:"),
+                                    React.createElement("input", { 
+                                        type: "number", min: 0, max: size-1,
+                                        value: nodeA,
+                                        onChange: (e) => setNodeA(Math.min(size-1, Math.max(0, parseInt(e.target.value) || 0))),
+                                        className: "bg-transparent w-full text-center text-white focus:outline-none font-mono"
+                                    })
+                                ),
+                                
+                                /* Input B */
+                                React.createElement("div", { 
+                                    className: `flex flex-1 items-center justify-center bg-slate-900 rounded-lg px-2 py-2 border ${activeInput === 'B' ? 'border-cyan-500' : 'border-slate-700'} transition-colors cursor-pointer`,
+                                    onClick: () => setActiveInput('B')
+                                },
+                                    React.createElement("span", { className: "text-slate-500 text-xs font-bold mr-2" }, "B:"),
+                                    React.createElement("input", { 
+                                        type: "number", min: 0, max: size-1,
+                                        value: nodeB,
+                                        onChange: (e) => setNodeB(Math.min(size-1, Math.max(0, parseInt(e.target.value) || 0))),
+                                        className: "bg-transparent w-full text-center text-white focus:outline-none font-mono"
+                                    })
+                                )
+                             ),
+
+                             /* Buttons */
+                             React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("button", {
+                                    onClick: handleFind,
+                                    disabled: isPlaying,
+                                    className: "w-full flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2.5 rounded-lg font-medium text-sm transition-colors border border-slate-600 disabled:opacity-50 shadow-sm"
+                                }, 
+                                    React.createElement(Search, { size: 16 }), "Find A"
+                                ),
+                                React.createElement("button", {
+                                    onClick: handleUnion,
+                                    disabled: isPlaying,
+                                    className: "w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg font-medium text-sm transition-colors shadow-lg shadow-emerald-900/20 disabled:opacity-50"
+                                }, 
+                                    React.createElement(Link2, { size: 16 }), "Union (A, B)"
+                                )
+                            )
+                        ),
+
+                        /* Playback Controls Card (Moved to bottom) */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                React.createElement(Activity, { size: 14 }), "Playback Controls"
+                            ),
+                            React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                React.createElement("button", { onClick: reset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "Reset" },
+                                    React.createElement(RotateCcw, { size: 18 })
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("button", { 
+                                        onClick: () => { setIsPlaying(!isPlaying); }, 
+                                        disabled: steps.length <= 1 || currentStepIndex === steps.length -1,
+                                        className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    },
+                                        isPlaying 
+                                            ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                            : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                    ),
+                                    React.createElement("button", { 
+                                        onClick: () => {
+                                            if(currentStepIndex < steps.length - 1) {
+                                                setCurrentStepIndex(prev => prev + 1);
+                                                setIsPlaying(false);
+                                            }
+                                        },
+                                        disabled: currentStepIndex === steps.length - 1, 
+                                        className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" 
+                                    },
+                                        React.createElement(SkipForward, { size: 18 })
+                                    )
+                                )
+                            ),
+
+                            /* Speed Slider */
+                            React.createElement("div", { className: "h-px w-full bg-slate-700/50 my-1" }),
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("div", { className: "flex justify-between items-center" },
+                                    React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                    React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: "100", max: "1900", step: "100",
+                                    value: animationSpeed,
+                                    onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                })
+                            )
+                        )
+                    ),
+
+                    /* Main Content (Right) - Now using min-w-0 to prevent flex overflow */
+                    React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4 min-w-0" },
+                        
+                        /* Description Box */
+                        React.createElement("div", { className: "w-full min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-lg" },
+                            React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentStep.description)
+                        ),
+
+                        /* Visualization Box */
+                        React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
+                            
+                            /* Header Area: Legend */
+                            React.createElement("div", { className: "flex justify-end items-center w-full border-b border-slate-700 pb-4" },
+                                React.createElement("div", { className: "flex flex-wrap gap-x-4 gap-y-2 text-xs font-medium text-slate-300" },
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.visiting.split(' ')[0]}` }), "Visiting"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.root.split(' ')[0]}` }), "Root"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.merged.split(' ')[0]}` }), "Merged"
+                                    )
+                                )
+                            ),
+
+                            /* Array Representation */
+                            React.createElement("div", { className: "flex flex-col items-center w-full" },
+                                React.createElement("div", { className: "flex items-center gap-8 mb-2 text-xs font-bold tracking-wider text-slate-500 uppercase" },
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-4 h-4 border border-slate-600 rounded bg-slate-800" }),
+                                        "Parent (Inside)"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("span", { className: "font-mono text-[10px]" }, "i"),
+                                        "Index (Below)"
+                                    )
+                                ),
+                                React.createElement("div", { className: "flex flex-wrap justify-center gap-1" },
+                                    displayParents.map((val, idx) => {
+                                        const colorClass = getNodeColor(idx);
+                                        const isSelectedA = !isPlaying && nodeA === idx;
+                                        const isSelectedB = !isPlaying && nodeB === idx;
+                                        const borderClass = isSelectedA ? "ring-2 ring-pink-500 ring-offset-2 ring-offset-slate-900" : 
+                                                        isSelectedB ? "ring-2 ring-cyan-500 ring-offset-2 ring-offset-slate-900" : "";
+
+                                        return React.createElement("div", { 
+                                            key: idx, 
+                                            onClick: () => handleNodeClick(idx),
+                                            className: "flex flex-col items-center cursor-pointer group" 
+                                        },
+                                            React.createElement("div", { 
+                                                className: `w-10 h-10 flex items-center justify-center rounded-md border font-mono font-bold transition-all duration-300 ${colorClass} ${borderClass} group-hover:scale-105` 
+                                            },
+                                                val
+                                            ),
+                                            React.createElement("span", { className: "text-[10px] text-slate-500 mt-1 font-mono group-hover:text-slate-300" }, idx)
+                                        );
+                                    })
+                                )
+                            ),
+
+                            /* Forest Representation */
+                            React.createElement("div", { className: "w-full" },
+                                React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 uppercase mb-2 ml-1" }, "Forest Structure"),
+                                renderForest()
+                            ),
+
+                            /* Footer Progress */
+                            React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                                React.createElement("span", null, `STEP ${currentStepIndex} / ${steps.length > 0 ? steps.length - 1 : 0}`),
+                                React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full mx-4 hidden sm:block" },
+                                    React.createElement("div", { 
+                                    className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                    style: { width: `${steps.length > 1 ? (currentStepIndex / (steps.length - 1)) * 100 : 0}%` }
+                                    })
+                                ),
+                                React.createElement("span", null, isPlaying ? "Animating..." : "Ready")
+                            )
+                        )
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(UnionFindVisualizer));
+    </script>
+</body>
+</html>

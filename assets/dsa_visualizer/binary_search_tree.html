@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BST Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+
+        /* Smooth transitions for moving nodes */
+        .node-transition {
+            transition: all 0.5s ease-in-out;
+        }
+        
+        /* Line transitions */
+        .line-transition {
+            transition: all 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Network, Search, Plus, Trash2, ArrowRight, Settings, Activity } from 'lucide-react';
+
+        // -- Node Class for BST Logic --
+        class TreeNode {
+            constructor(val) {
+                this.val = val;
+                this.left = null;
+                this.right = null;
+                this.id = crypto.randomUUID(); // Unique ID for React keys and tracking
+            }
+        }
+
+        const BSTVisualizer = () => {
+            // -- State --
+            const [rootNode, setRootNode] = useState(null);
+            const [inputValue, setInputValue] = useState(50);
+            const [animationSpeed, setAnimationSpeed] = useState(500);
+            
+            // Animation State
+            // Each step: { nodes: [], lines: [], traversal: [], activeIds: [], foundIds: [], visitedIds: [], description: "" }
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-700 border-slate-600 text-slate-200',
+                visiting: 'bg-amber-600 border-amber-400 text-amber-50 shadow-[0_0_15px_rgba(245,158,11,0.5)]', 
+                found: 'bg-emerald-600 border-emerald-400 text-emerald-50 shadow-[0_0_15px_rgba(16,185,129,0.5)]', 
+                target: 'bg-pink-600 border-pink-400 text-pink-50',
+                traversed: 'bg-slate-600 border-slate-500 text-slate-400'
+            };
+
+            // -- Helper: Clone Tree --
+            const cloneTree = (node) => {
+                if (!node) return null;
+                const newNode = new TreeNode(node.val);
+                newNode.id = node.id; // Preserve ID for tracking
+                newNode.left = cloneTree(node.left);
+                newNode.right = cloneTree(node.right);
+                return newNode;
+            };
+
+            // -- Helper: Get In-Order Traversal (Array) --
+            const getInOrder = (node, list = []) => {
+                if (!node) return list;
+                getInOrder(node.left, list);
+                list.push(node.val);
+                getInOrder(node.right, list);
+                return list;
+            };
+
+            // -- Helper: Generate Render Data (Coordinate System) --
+            // Returns flattened list of nodes with x, y coordinates
+            const generateRenderData = (root, activeIds = [], foundIds = [], visitedIds = []) => {
+                if (!root) return { nodes: [], lines: [] };
+
+                const nodes = [];
+                const lines = [];
+                const verticalGap = 70;
+                
+                const traverse = (node, x, y, level, parentX = null, parentY = null) => {
+                    if (!node) return;
+
+                    // Determine visual state
+                    let status = 'default';
+                    if (foundIds.includes(node.id)) status = 'found';
+                    else if (activeIds.includes(node.id)) status = 'visiting';
+                    else if (visitedIds.includes(node.id)) status = 'traversed';
+
+                    nodes.push({
+                        id: node.id,
+                        val: node.val,
+                        x, y,
+                        status
+                    });
+
+                    if (parentX !== null) {
+                        lines.push({
+                            id: `line-${node.id}`,
+                            x1: parentX, y1: parentY,
+                            x2: x, y2: y,
+                            status: visitedIds.includes(node.id) || foundIds.includes(node.id) ? 'traversed' : 'default'
+                        });
+                    }
+
+                    // Spread decreases as we go deeper
+                    const spread = 25 / Math.pow(2, level); 
+                    
+                    traverse(node.left, x - spread, y + verticalGap, level + 1, x, y);
+                    traverse(node.right, x + spread, y + verticalGap, level + 1, x, y);
+                };
+
+                // Root at 50% width, 50px from top
+                traverse(root, 50, 50, 0);
+                return { nodes, lines };
+            };
+
+            // -- Initial Setup --
+            useEffect(() => {
+                handleReset();
+            }, []);
+
+            const handleReset = () => {
+                const initialVals = [45, 25, 75, 15, 35];
+                let currentRoot = null;
+                
+                // Construct initial tree silently
+                const insertHelper = (node, val) => {
+                    if (!node) return new TreeNode(val);
+                    if (val < node.val) node.left = insertHelper(node.left, val);
+                    else if (val > node.val) node.right = insertHelper(node.right, val);
+                    return node;
+                };
+
+                initialVals.forEach(v => currentRoot = insertHelper(currentRoot, v));
+                
+                setRootNode(currentRoot);
+                const renderData = generateRenderData(currentRoot);
+                setSteps([{
+                    ...renderData,
+                    traversal: getInOrder(currentRoot),
+                    description: "Initial BST State."
+                }]);
+                setCurrentStepIndex(0);
+                setIsPlaying(false);
+            };
+
+            // ----------------------------------------------------------------
+            // 1. INSERT OPERATION
+            // ----------------------------------------------------------------
+            const handleInsert = () => {
+                const val = parseInt(inputValue);
+                if (isNaN(val)) return;
+
+                const newSteps = [];
+                const simRoot = cloneTree(rootNode); // Simulation tree
+                const visitedIds = [];
+
+                if (!simRoot) {
+                    // Empty tree case
+                    const newNode = new TreeNode(val);
+                    const renderData = generateRenderData(newNode, [newNode.id], [newNode.id]);
+                    newSteps.push({
+                        ...renderData,
+                        traversal: [val],
+                        description: `Inserted root node ${val}.`
+                    });
+                    setRootNode(newNode);
+                } else {
+                    let curr = simRoot;
+                    let parent = null;
+                    let depth = 0;
+
+                    while (true) {
+                        visitedIds.push(curr.id);
+                        
+                        // Step: Compare
+                        newSteps.push({
+                            ...generateRenderData(simRoot, [curr.id], [], visitedIds),
+                            traversal: getInOrder(simRoot),
+                            description: `Comparing ${val} with ${curr.val}. ${val < curr.val ? 'Go Left.' : val > curr.val ? 'Go Right.' : 'Duplicate value.'}`
+                        });
+
+                        if (val === curr.val) {
+                            newSteps.push({
+                                ...generateRenderData(simRoot, [], [curr.id], visitedIds),
+                                traversal: getInOrder(simRoot),
+                                description: `Value ${val} already exists. No duplicates allowed.`
+                            });
+                            setSteps(newSteps);
+                            setCurrentStepIndex(0);
+                            setIsPlaying(true);
+                            return; // Stop
+                        }
+
+                        parent = curr;
+                        if (val < curr.val) {
+                            if (!curr.left) {
+                                curr.left = new TreeNode(val);
+                                visitedIds.push(curr.left.id);
+                                newSteps.push({
+                                    ...generateRenderData(simRoot, [], [curr.left.id], visitedIds),
+                                    traversal: getInOrder(simRoot),
+                                    description: `Found empty spot. Inserted ${val} as left child of ${curr.val}.`
+                                });
+                                break;
+                            }
+                            curr = curr.left;
+                        } else {
+                            if (!curr.right) {
+                                curr.right = new TreeNode(val);
+                                visitedIds.push(curr.right.id);
+                                newSteps.push({
+                                    ...generateRenderData(simRoot, [], [curr.right.id], visitedIds),
+                                    traversal: getInOrder(simRoot),
+                                    description: `Found empty spot. Inserted ${val} as right child of ${curr.val}.`
+                                });
+                                break;
+                            }
+                            curr = curr.right;
+                        }
+                        depth++;
+                        if (depth > 6) {
+                             alert("Tree limit reached for visualization clarity.");
+                             return;
+                        }
+                    }
+                }
+
+                // Final state
+                newSteps.push({
+                    ...generateRenderData(simRoot),
+                    traversal: getInOrder(simRoot),
+                    description: "Insertion Complete."
+                });
+
+                setSteps(newSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+                setRootNode(simRoot);
+            };
+
+            // ----------------------------------------------------------------
+            // 2. SEARCH OPERATION
+            // ----------------------------------------------------------------
+            const handleSearch = () => {
+                const val = parseInt(inputValue);
+                if (isNaN(val) || !rootNode) return;
+
+                const newSteps = [];
+                const visitedIds = [];
+                let curr = rootNode;
+                let found = false;
+
+                while (curr) {
+                    visitedIds.push(curr.id);
+
+                    // Visualize Visit
+                    newSteps.push({
+                        ...generateRenderData(rootNode, [curr.id], [], visitedIds.slice(0, -1)), // Don't highlight current as visited yet
+                        traversal: getInOrder(rootNode),
+                        description: `Checking ${curr.val}... ${val === curr.val ? 'Found match!' : val < curr.val ? `${val} < ${curr.val}, going Left.` : `${val} > ${curr.val}, going Right.`}`
+                    });
+
+                    if (val === curr.val) {
+                        found = true;
+                        newSteps.push({
+                            ...generateRenderData(rootNode, [], [curr.id], visitedIds),
+                            traversal: getInOrder(rootNode),
+                            description: `Search Successful! Found ${val}.`
+                        });
+                        break;
+                    } else if (val < curr.val) {
+                        curr = curr.left;
+                    } else {
+                        curr = curr.right;
+                    }
+                }
+
+                if (!found) {
+                     newSteps.push({
+                        ...generateRenderData(rootNode, [], [], visitedIds),
+                        traversal: getInOrder(rootNode),
+                        description: `Value ${val} not found in the tree.`
+                    });
+                }
+
+                setSteps(newSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+            };
+
+            // ----------------------------------------------------------------
+            // 3. DELETE OPERATION
+            // ----------------------------------------------------------------
+            const handleDelete = () => {
+                const val = parseInt(inputValue);
+                if (isNaN(val) || !rootNode) return;
+
+                const newSteps = [];
+                const simRoot = cloneTree(rootNode); // Work on clone
+                const visitedIds = [];
+
+                // Helper to find min node in a subtree (for successor)
+                const findMin = (node) => {
+                    while (node.left) node = node.left;
+                    return node;
+                };
+
+                // Recursive Delete Logic
+                const deleteNode = (node, key) => {
+                    if (!node) return null;
+                    
+                    visitedIds.push(node.id);
+
+                    if (key < node.val) {
+                        newSteps.push({
+                            ...generateRenderData(simRoot, [node.id], [], [...visitedIds]),
+                            traversal: getInOrder(simRoot),
+                            description: `${key} < ${node.val}. Searching left.`
+                        });
+                        node.left = deleteNode(node.left, key);
+                    } 
+                    else if (key > node.val) {
+                        newSteps.push({
+                            ...generateRenderData(simRoot, [node.id], [], [...visitedIds]),
+                            traversal: getInOrder(simRoot),
+                            description: `${key} > ${node.val}. Searching right.`
+                        });
+                        node.right = deleteNode(node.right, key);
+                    } 
+                    else {
+                        // Node Found
+                        newSteps.push({
+                            ...generateRenderData(simRoot, [], [node.id], [...visitedIds]),
+                            traversal: getInOrder(simRoot),
+                            description: `Found ${key}. Determining removal strategy...`
+                        });
+
+                        // Case 1: No child (Leaf)
+                        if (!node.left && !node.right) {
+                            newSteps.push({
+                                ...generateRenderData(simRoot, [], [node.id], [...visitedIds]),
+                                traversal: getInOrder(simRoot),
+                                description: `Node is a leaf. Removing.`
+                            });
+                            return null;
+                        }
+
+                        // Case 2: One child
+                        if (!node.left) {
+                            newSteps.push({
+                                ...generateRenderData(simRoot, [node.right.id], [node.id], [...visitedIds]),
+                                traversal: getInOrder(simRoot),
+                                description: `Node has only right child. Replacing with right child ${node.right.val}.`
+                            });
+                            return node.right;
+                        }
+                        if (!node.right) {
+                            newSteps.push({
+                                ...generateRenderData(simRoot, [node.left.id], [node.id], [...visitedIds]),
+                                traversal: getInOrder(simRoot),
+                                description: `Node has only left child. Replacing with left child ${node.left.val}.`
+                            });
+                            return node.left;
+                        }
+
+                        // Case 3: Two children
+                        const successor = findMin(node.right);
+                        newSteps.push({
+                            ...generateRenderData(simRoot, [successor.id], [node.id], [...visitedIds]),
+                            traversal: getInOrder(simRoot),
+                            description: `Node has two children. Finding in-order successor: ${successor.val}.`
+                        });
+
+                        const oldVal = node.val;
+                        node.val = successor.val;
+                        node.id = successor.id;
+
+                        newSteps.push({
+                            ...generateRenderData(simRoot, [], [node.id], [...visitedIds]),
+                            traversal: getInOrder(simRoot),
+                            description: `Replaced ${oldVal} with ${successor.val}. Deleting ${successor.val} from right.`
+                        });
+
+                        node.right = deleteNode(node.right, successor.val);
+                    }
+                    return node;
+                };
+
+                const newRoot = deleteNode(simRoot, val);
+
+                newSteps.push({
+                    ...generateRenderData(newRoot),
+                    traversal: getInOrder(newRoot),
+                    description: "Deletion logic complete."
+                });
+
+                setSteps(newSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+                setRootNode(newRoot);
+            };
+
+
+            // -- Playback Effect --
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                return prev;
+                            }
+                        });
+                    }, 2000 - animationSpeed);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps, animationSpeed]);
+
+
+            // -- Render Helpers --
+            const currentStep = steps[currentStepIndex] || { nodes: [], lines: [], traversal: [], description: "Ready" };
+            
+            const getNodeColor = (status) => {
+                switch(status) {
+                    case 'visiting': return COLORS.visiting;
+                    case 'found': return COLORS.found;
+                    case 'traversed': return COLORS.traversed;
+                    case 'target': return COLORS.target;
+                    default: return COLORS.default;
+                }
+            };
+
+            const togglePlay = () => {
+                if (currentStepIndex === steps.length - 1 && steps.length > 1) { 
+                    setCurrentStepIndex(0);
+                    setTimeout(() => setIsPlaying(true), 100); 
+                } else {
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+            const handleNext = () => {
+                if (currentStepIndex < steps.length - 1) {
+                    setCurrentStepIndex(prev => prev + 1);
+                    setIsPlaying(false);
+                }
+            };
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Title (Full Width) */
+                React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
+                    React.createElement(Network, { size: 32, className: "text-emerald-400" }), 
+                    React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-emerald-400 whitespace-nowrap tracking-tight" }, "Binary Search Tree")
+                ),
+
+                /* Main Layout: Sidebar (Left) + Vis (Right) */
+                React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
+                    
+                    /* Sidebar */
+                    React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
+                        
+                        /* Actions Card (Moved Up) */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                React.createElement(Settings, { size: 14 }), "Actions"
+                            ),
+                            
+                            /* Input */
+                             React.createElement("div", { className: "relative w-full" },
+                                React.createElement("input", { 
+                                    type: "number",
+                                    value: inputValue,
+                                    onChange: (e) => setInputValue(e.target.value),
+                                    className: "w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-3 text-slate-200 text-center focus:outline-none focus:border-emerald-500 font-mono text-lg",
+                                    placeholder: "Value"
+                                })
+                             ),
+                            
+                            /* Buttons */
+                            React.createElement("div", { className: "flex flex-col gap-3" },
+                                React.createElement("button", {
+                                    onClick: handleInsert,
+                                    disabled: isPlaying,
+                                    className: "w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50"
+                                }, 
+                                   React.createElement(Plus, { size: 16 }), "Insert"
+                                ),
+
+                                React.createElement("button", {
+                                    onClick: handleSearch,
+                                    disabled: isPlaying || !rootNode,
+                                    className: "w-full flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50"
+                                }, 
+                                   React.createElement(Search, { size: 16 }), "Search"
+                                ),
+
+                                React.createElement("button", {
+                                    onClick: handleDelete,
+                                    disabled: isPlaying || !rootNode,
+                                    className: "w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50"
+                                }, 
+                                   React.createElement(Trash2, { size: 16 }), "Delete"
+                                )
+                            )
+                        ),
+
+                        /* Playback Controls Card (Moved Down) */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                React.createElement(Activity, { size: 14 }), "Playback Controls"
+                            ),
+                            React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                React.createElement("button", { onClick: handleReset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "Reset" },
+                                    React.createElement(RotateCcw, { size: 18 })
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("button", { 
+                                        onClick: togglePlay, 
+                                        disabled: steps.length <= 1,
+                                        className: "p-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl shadow-lg shadow-emerald-900/50 transition-all hover:scale-105 active:scale-95 mx-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    },
+                                        isPlaying 
+                                            ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                            : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                    ),
+                                    React.createElement("button", { 
+                                        onClick: handleNext, 
+                                        disabled: currentStepIndex === steps.length - 1, 
+                                        className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" 
+                                    },
+                                        React.createElement(SkipForward, { size: 18 })
+                                    )
+                                )
+                            ),
+                            
+                            /* Divider */
+                            React.createElement("div", { className: "h-px w-full bg-slate-700/50 my-1" }),
+
+                            /* Speed Slider */
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("div", { className: "flex justify-between items-center" },
+                                    React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                    React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: "100", max: "1900", step: "100",
+                                    value: animationSpeed,
+                                    onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                })
+                            )
+                        )
+                    ),
+
+                    /* Content (Right) */
+                    React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4" },
+                        
+                        /* Description Box */
+                        React.createElement("div", { className: "w-full min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-lg" },
+                            React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center" }, currentStep.description)
+                        ),
+
+                        /* Main Canvas */
+                        React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
+                            
+                            /* Legend - ALIGNED RIGHT */
+                            React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 pb-4 border-b border-slate-700" },
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.visiting.split(' ')[0]}` }), "Comparing"
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.found.split(' ')[0]}` }), "Found/Inserted"
+                                ),
+                                 React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.default.split(' ')[0]}` }), "Idle"
+                                )
+                            ),
+
+                            /* Traversal Strip */
+                            React.createElement("div", { className: "flex flex-col items-center w-full" },
+                                React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase flex items-center gap-2" }, 
+                                    "In-Order Traversal (Sorted)",
+                                    React.createElement(ArrowRight, { size: 12 })
+                                ),
+                                React.createElement("div", { className: "flex flex-wrap justify-center gap-1" },
+                                    currentStep.traversal.map((val, idx) => {
+                                        return React.createElement("div", { key: idx, className: `w-10 h-10 flex items-center justify-center rounded-md border font-mono font-bold transition-all duration-300 ${COLORS.default}` },
+                                            React.createElement("span", { className: "text-sm leading-none" }, val)
+                                        );
+                                    })
+                                )
+                            ),
+
+                            /* Tree Representation Area */
+                            React.createElement("div", { className: "relative w-full min-h-[450px] bg-slate-900/50 rounded-lg p-6 flex flex-col items-center justify-start overflow-hidden mt-2 border border-slate-800" },
+                                React.createElement("h3", { className: "absolute top-4 left-4 text-xs font-bold tracking-wider text-slate-500 uppercase z-0" }, "Tree Structure"),
+                                
+                                /* Background Grid */
+                                React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                                
+                                /* Canvas Container */
+                                React.createElement("div", { className: "relative w-full flex-grow h-full min-w-[600px]" },
+                                    
+                                    /* Lines Layer */
+                                    React.createElement("svg", { className: "absolute top-0 left-0 w-full h-full pointer-events-none z-0 overflow-visible" },
+                                        currentStep.lines.map(line => 
+                                            React.createElement("line", {
+                                                key: line.id,
+                                                x1: `${line.x1}%`, y1: line.y1,
+                                                x2: `${line.x2}%`, y2: line.y2,
+                                                stroke: line.status === 'traversed' ? '#10b981' : '#94a3b8', 
+                                                strokeWidth: line.status === 'traversed' ? "3" : "2",
+                                                className: "line-transition opacity-80"
+                                            })
+                                        )
+                                    ),
+
+                                    /* Nodes Layer */
+                                    currentStep.nodes.map(node => 
+                                        React.createElement("div", {
+                                            key: node.id,
+                                            className: "absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 node-transition",
+                                            style: { left: `${node.x}%`, top: `${node.y}px` }
+                                        },
+                                            React.createElement("div", {
+                                                className: `w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-sm sm:text-base font-bold border-2 shadow-lg transition-colors duration-300 ${getNodeColor(node.status)}`
+                                            }, node.val)
+                                        )
+                                    )
+                                )
+                            ),
+
+                            /* Footer Progress */
+                            React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                                React.createElement("span", null, `STEP ${currentStepIndex} / ${steps.length > 0 ? steps.length - 1 : 0}`),
+                                React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full mx-4 hidden sm:block" },
+                                    React.createElement("div", { 
+                                    className: "h-full bg-emerald-500 rounded-full transition-all duration-100",
+                                    style: { width: `${steps.length > 1 ? (currentStepIndex / (steps.length - 1)) * 100 : 0}%` }
+                                    })
+                                ),
+                                React.createElement("span", null, isPlaying ? "Animating..." : "Ready")
+                            )
+                        )
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(BSTVisualizer));
+    </script>
+</body>
+</html>

@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binary Heap Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+
+        /* Tree connector lines */
+        .tree-line {
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitBranch, ArrowDown, Plus, Trash2, Settings, Activity, MousePointer2, CheckCircle2 } from 'lucide-react';
+
+        const BinaryHeapVisualizer = () => {
+            // -- State --
+            const [arraySize, setArraySize] = useState(7);
+            const [animationSpeed, setAnimationSpeed] = useState(500); 
+            const [heap, setHeap] = useState([]);
+            const [inputValue, setInputValue] = useState(50);
+            const [heapType, setHeapType] = useState('max'); // 'max' or 'min'
+            
+            // Animation State
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-700 border-slate-600 text-slate-200',
+                comparing: 'bg-amber-600 border-amber-400 text-amber-50 shadow-[0_0_15px_rgba(245,158,11,0.5)]', 
+                swapping: 'bg-indigo-600 border-indigo-400 text-indigo-50 shadow-[0_0_15px_rgba(99,102,241,0.5)]',
+                sorted: 'bg-emerald-600 border-emerald-400 text-emerald-50', 
+                new: 'bg-pink-600 border-pink-400 text-pink-50',
+            };
+
+            // -- Algorithm Logic --
+
+            // Comparison helper
+            const compare = useCallback((child, parent, type) => {
+                if (type === 'max') return child > parent;
+                return child < parent;
+            }, []);
+
+            // Generate a valid Heap for initial state
+            const generateRandomHeap = useCallback((size, type) => {
+                const arr = [];
+                for(let i=0; i<size; i++) {
+                    arr.push(Math.floor(Math.random() * 99) + 1);
+                }
+                // Heapify the random array
+                for (let i = Math.floor(arr.length / 2) - 1; i >= 0; i--) {
+                    heapifyDownHelper(arr, arr.length, i, type);
+                }
+                return arr;
+            }, [compare]);
+
+            const heapifyDownHelper = (arr, n, i, type) => {
+                let extreme = i; // largest for max-heap, smallest for min-heap
+                let left = 2 * i + 1;
+                let right = 2 * i + 2;
+
+                if (left < n && compare(arr[left], arr[extreme], type)) extreme = left;
+                if (right < n && compare(arr[right], arr[extreme], type)) extreme = right;
+
+                if (extreme !== i) {
+                    [arr[i], arr[extreme]] = [arr[extreme], arr[i]];
+                    heapifyDownHelper(arr, n, extreme, type);
+                }
+            };
+
+            // Initialize
+            useEffect(() => {
+                reset();
+            }, [arraySize, heapType]);
+
+            const reset = () => {
+                const newHeap = generateRandomHeap(arraySize, heapType);
+                setHeap(newHeap);
+                setSteps([{
+                    array: [...newHeap],
+                    highlight: [],
+                    swapping: [],
+                    description: `Initial ${heapType === 'max' ? 'Max' : 'Min'}-Heap State.`
+                }]);
+                setCurrentStepIndex(0);
+                setIsPlaying(false);
+            };
+
+            // 1. INSERT OPERATION
+            const handleInsert = () => {
+                if (heap.length >= 15) {
+                    alert("Heap full! (Max 15 for visualization)");
+                    return;
+                }
+                
+                const val = parseInt(inputValue);
+                if (isNaN(val)) return;
+
+                const newSteps = [];
+                const currentHeap = [...heap];
+                
+                // Step 1: Add to end
+                currentHeap.push(val);
+                newSteps.push({
+                    array: [...currentHeap],
+                    highlight: [currentHeap.length - 1],
+                    swapping: [],
+                    description: `Inserted ${val} at the end (index ${currentHeap.length - 1}).`
+                });
+
+                // Bubble Up
+                let index = currentHeap.length - 1;
+                while (index > 0) {
+                    let parentIndex = Math.floor((index - 1) / 2);
+                    
+                    newSteps.push({
+                        array: [...currentHeap],
+                        highlight: [index, parentIndex],
+                        swapping: [],
+                        description: `Comparing child (${currentHeap[index]}) with parent (${currentHeap[parentIndex]}).`
+                    });
+
+                    // Check if child violates heap property relative to parent
+                    if (compare(currentHeap[index], currentHeap[parentIndex], heapType)) {
+                        newSteps.push({
+                            array: [...currentHeap],
+                            highlight: [],
+                            swapping: [index, parentIndex],
+                            description: `${currentHeap[index]} ${heapType === 'max' ? '>' : '<'} ${currentHeap[parentIndex]}, so we swap.`
+                        });
+
+                        [currentHeap[index], currentHeap[parentIndex]] = [currentHeap[parentIndex], currentHeap[index]];
+                        
+                        newSteps.push({
+                            array: [...currentHeap],
+                            highlight: [parentIndex], // Highlight new position
+                            swapping: [],
+                            description: `Swapped. Continuing up.`
+                        });
+                        
+                        index = parentIndex;
+                    } else {
+                        newSteps.push({
+                            array: [...currentHeap],
+                            highlight: [index, parentIndex],
+                            swapping: [],
+                            description: `Heap property satisfied.`
+                        });
+                        break;
+                    }
+                }
+
+                newSteps.push({
+                    array: [...currentHeap],
+                    highlight: [],
+                    swapping: [],
+                    description: `Insert Complete.`
+                });
+
+                setSteps(newSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+            };
+
+            // 2. EXTRACT ROOT OPERATION
+            const handleExtractRoot = () => {
+                if (heap.length === 0) return;
+
+                const newSteps = [];
+                const currentHeap = [...heap];
+                const rootName = heapType === 'max' ? 'maximum' : 'minimum';
+
+                // Step 0: Highlight Root
+                newSteps.push({
+                    array: [...currentHeap],
+                    highlight: [0],
+                    swapping: [],
+                    description: `The ${rootName} element is at the root (${currentHeap[0]}).`
+                });
+
+                // Step 1: Swap Root with Last
+                newSteps.push({
+                    array: [...currentHeap],
+                    highlight: [],
+                    swapping: [0, currentHeap.length - 1],
+                    description: `Swap root (${currentHeap[0]}) with last element (${currentHeap[currentHeap.length - 1]}).`
+                });
+
+                [currentHeap[0], currentHeap[currentHeap.length - 1]] = [currentHeap[currentHeap.length - 1], currentHeap[0]];
+
+                newSteps.push({
+                    array: [...currentHeap],
+                    highlight: [currentHeap.length - 1],
+                    swapping: [],
+                    description: `Root is now at the end. Ready to remove.`
+                });
+
+                // Step 2: Pop last
+                const removed = currentHeap.pop();
+                newSteps.push({
+                    array: [...currentHeap],
+                    highlight: [],
+                    swapping: [],
+                    description: `Removed ${removed}. Now restoring heap property (Heapify Down).`
+                });
+
+                // Heapify Down
+                let index = 0;
+                const length = currentHeap.length;
+
+                while(true) {
+                    let left = 2 * index + 1;
+                    let right = 2 * index + 2;
+                    let extreme = index;
+
+                    // Highlight comparison candidates
+                    let checkIndices = [index];
+                    if (left < length) checkIndices.push(left);
+                    if (right < length) checkIndices.push(right);
+                    
+                    if (checkIndices.length > 1) {
+                         newSteps.push({
+                            array: [...currentHeap],
+                            highlight: checkIndices,
+                            swapping: [],
+                            description: `Comparing parent (${currentHeap[index]}) with children.`
+                        });
+                    }
+
+                    if (left < length && compare(currentHeap[left], currentHeap[extreme], heapType)) {
+                        extreme = left;
+                    }
+                    if (right < length && compare(currentHeap[right], currentHeap[extreme], heapType)) {
+                        extreme = right;
+                    }
+
+                    if (extreme !== index) {
+                        newSteps.push({
+                            array: [...currentHeap],
+                            highlight: [],
+                            swapping: [index, extreme],
+                            description: `Child ${currentHeap[extreme]} is ${heapType === 'max' ? 'larger' : 'smaller'} than parent ${currentHeap[index]}. Swapping.`
+                        });
+
+                        [currentHeap[index], currentHeap[extreme]] = [currentHeap[extreme], currentHeap[index]];
+                        index = extreme;
+
+                         newSteps.push({
+                            array: [...currentHeap],
+                            highlight: [index],
+                            swapping: [],
+                            description: `Swapped. Continuing down.`
+                        });
+
+                    } else {
+                         newSteps.push({
+                            array: [...currentHeap],
+                            highlight: [index],
+                            swapping: [],
+                            description: `Parent satisfies heap property. Restoration complete.`
+                        });
+                        break;
+                    }
+                }
+                
+                newSteps.push({
+                    array: [...currentHeap],
+                    highlight: [],
+                    swapping: [],
+                    description: `Extraction Complete.`
+                });
+
+                setSteps(newSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+            };
+
+            // -- Playback Effect --
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                // Commit the final state to the real heap state so next op starts correctly
+                                setHeap(steps[steps.length - 1].array);
+                                return prev;
+                            }
+                        });
+                    }, 2000 - animationSpeed);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps, animationSpeed]);
+
+            // -- Render Helpers --
+            const currentStep = steps[currentStepIndex] || { array: heap, highlight: [], swapping: [], description: "Ready" };
+            const displayArray = currentStep.array;
+
+            const getNodeColor = (index) => {
+                if (currentStep.swapping.includes(index)) return COLORS.swapping;
+                if (currentStep.highlight.includes(index)) return COLORS.comparing;
+                return COLORS.default;
+            };
+
+            // Controls Handlers
+            const handleNext = () => {
+                if (currentStepIndex < steps.length - 1) {
+                    setCurrentStepIndex(prev => prev + 1);
+                    setIsPlaying(false);
+                }
+            };
+
+            const handlePrev = () => {
+                if (currentStepIndex > 0) {
+                    setCurrentStepIndex(prev => prev - 1);
+                    setIsPlaying(false);
+                }
+            };
+
+            const togglePlay = () => {
+                if (currentStepIndex === steps.length - 1) { 
+                    reset();
+                    setTimeout(() => setIsPlaying(true), 100); 
+                } else {
+                    setIsPlaying(!isPlaying);
+                }
+            };
+
+            // Tree Calculation
+            const renderTree = () => {
+                if (displayArray.length === 0) {
+                    return React.createElement("div", { className: "text-slate-500 italic" }, "Heap is empty");
+                }
+
+                const levels = Math.floor(Math.log2(displayArray.length)) + 1;
+                const nodeHeight = 60;
+                const verticalGap = 80;
+                const containerHeight = levels * verticalGap + 50;
+                
+                // Helper to calculate position
+                // Returns x (percentage 0-100) and y (pixels)
+                const getPosition = (index) => {
+                    const level = Math.floor(Math.log2(index + 1));
+                    const maxNodesInLevel = Math.pow(2, level);
+                    const positionInLevel = index - (maxNodesInLevel - 1);
+                    
+                    // x = (position * 2 + 1) * (100 / (2 * maxNodes))
+                    const x = (positionInLevel * 2 + 1) * (100 / (2 * maxNodesInLevel));
+                    const y = level * verticalGap + 40;
+                    
+                    return { x, y };
+                };
+
+                // 1. Generate Lines (Edges)
+                const lines = [];
+                for (let i = 1; i < displayArray.length; i++) {
+                    const parentIndex = Math.floor((i - 1) / 2);
+                    const start = getPosition(parentIndex);
+                    const end = getPosition(i);
+                    
+                    lines.push(
+                        React.createElement("line", {
+                            key: `line-${i}`,
+                            x1: `${start.x}%`,
+                            y1: start.y,
+                            x2: `${end.x}%`,
+                            y2: end.y,
+                            stroke: "#475569", // slate-600
+                            strokeWidth: "2",
+                            className: "tree-line"
+                        })
+                    );
+                }
+
+                // 2. Generate Nodes
+                const nodes = displayArray.map((val, idx) => {
+                    const pos = getPosition(idx);
+                    const colorClass = getNodeColor(idx);
+                    
+                    return React.createElement("div", {
+                        key: `node-${idx}`,
+                        className: "absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 transition-all duration-500 ease-in-out",
+                        style: { 
+                            left: `${pos.x}%`, 
+                            top: `${pos.y}px` 
+                        }
+                    },
+                        React.createElement("div", {
+                            className: `w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-sm sm:text-base font-bold border-2 shadow-lg transition-colors duration-300 ${colorClass}`
+                        }, val),
+                        React.createElement("span", { className: "text-[10px] text-slate-500 mt-1 font-mono" }, idx)
+                    );
+                });
+
+                return React.createElement("div", { 
+                    className: "relative w-full overflow-x-auto overflow-y-hidden custom-scrollbar",
+                    style: { height: `${containerHeight}px` } 
+                },
+                    /* Inner container with min-width to prevent squashing on small screens */
+                    React.createElement("div", { 
+                        className: "relative w-full min-w-[600px] h-full"
+                    },
+                        /* SVG Layer for Lines */
+                        React.createElement("svg", {
+                            className: "absolute top-0 left-0 w-full h-full pointer-events-none z-0"
+                        }, lines),
+                        
+                        /* Node Layer */
+                        nodes
+                    )
+                );
+            };
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Title (Full Width) */
+                React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
+                    React.createElement(GitBranch, { size: 32, className: "text-indigo-400 rotate-180" }),
+                    React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Binary Heap")
+                ),
+
+                /* Main Layout: Sidebar (Left) + Content (Right) */
+                React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
+                    
+                    /* Sidebar: Controls & Settings */
+                    React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
+                        
+                        /* Settings Card */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                React.createElement(Settings, { size: 14 }), "Settings"
+                            ),
+                            
+                            /* Size Slider */
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("div", { className: "flex justify-between items-center" },
+                                    React.createElement("span", { className: "text-xs text-slate-400" }, "Heap Size"),
+                                    React.createElement("span", { className: "text-xs font-mono text-indigo-300 bg-indigo-900/30 px-2 py-0.5 rounded" }, arraySize)
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: "3", max: "15", step: "1",
+                                    value: arraySize,
+                                    onChange: (e) => setArraySize(Number(e.target.value)),
+                                    disabled: isPlaying,
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                                })
+                            ),
+
+                            /* Heap Type Toggle */
+                            React.createElement("div", { className: "flex flex-col gap-2 pt-2 border-t border-slate-700/50" },
+                                React.createElement("span", { className: "text-xs text-slate-400" }, "Heap Type"),
+                                React.createElement("div", { className: "grid grid-cols-2 gap-2 bg-slate-900/50 p-1 rounded-lg" },
+                                    /* Max Heap Button */
+                                    React.createElement("button", {
+                                        onClick: () => !isPlaying && setHeapType('max'),
+                                        disabled: isPlaying,
+                                        className: `flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-all ${heapType === 'max' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`
+                                    }, "Max Heap"),
+                                    
+                                    /* Min Heap Button */
+                                    React.createElement("button", {
+                                        onClick: () => !isPlaying && setHeapType('min'),
+                                        disabled: isPlaying,
+                                        className: `flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md text-xs font-medium transition-all ${heapType === 'min' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`
+                                    }, "Min Heap")
+                                )
+                            )
+                        ),
+
+                        /* Actions Card */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                React.createElement(MousePointer2, { size: 14 }), "Actions"
+                            ),
+                            
+                            /* Insert Action */
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("span", { className: "text-xs text-slate-400" }, "Insert Value"),
+                                React.createElement("div", { className: "flex gap-2" },
+                                    React.createElement("input", { 
+                                        type: "number",
+                                        value: inputValue,
+                                        onChange: (e) => setInputValue(e.target.value),
+                                        className: "bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 w-full text-slate-200 focus:outline-none focus:border-indigo-500",
+                                        placeholder: "Val"
+                                    }),
+                                    React.createElement("button", {
+                                        onClick: handleInsert,
+                                        disabled: isPlaying,
+                                        className: "bg-emerald-600 hover:bg-emerald-500 text-white px-3 rounded-lg transition-colors shadow-lg disabled:opacity-50 flex items-center justify-center"
+                                    }, 
+                                        React.createElement(Plus, { size: 18 })
+                                    )
+                                )
+                            ),
+
+                            /* Extract Root Action (Dynamic Label) */
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("span", { className: "text-xs text-slate-400" }, "Remove Root"),
+                                React.createElement("button", {
+                                    onClick: handleExtractRoot,
+                                    disabled: isPlaying || displayArray.length === 0,
+                                    className: "w-full flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50"
+                                }, 
+                                    React.createElement(Trash2, { size: 16 }), `Extract ${heapType === 'max' ? 'Max' : 'Min'}`
+                                )
+                            )
+                        ),
+
+                        /* Playback Controls Card */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                React.createElement(Activity, { size: 14 }), "Playback Controls"
+                            ),
+                            React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                React.createElement("button", { onClick: reset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "New Random Heap" },
+                                    React.createElement(RotateCcw, { size: 18 })
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                        React.createElement(SkipBack, { size: 18 })
+                                    ),
+                                    React.createElement("button", { 
+                                        onClick: togglePlay, 
+                                        disabled: steps.length <= 1,
+                                        className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1 disabled:opacity-50"
+                                    },
+                                        isPlaying 
+                                            ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                            : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                    ),
+                                    React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                        React.createElement(SkipForward, { size: 18 })
+                                    )
+                                )
+                            ),
+
+                            /* Divider */
+                            React.createElement("div", { className: "h-px w-full bg-slate-700/50 my-1" }),
+
+                            /* Speed Slider */
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("div", { className: "flex justify-between items-center" },
+                                    React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                    React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: "100", max: "1900", step: "100",
+                                    value: animationSpeed,
+                                    onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                })
+                            )
+                        )
+                    ),
+
+                    /* Main Content: Visualization */
+                    React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4" },
+                        
+                        /* Description Box */
+                        React.createElement("div", { className: "w-full min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-lg" },
+                            React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center" }, currentStep.description)
+                        ),
+
+                        /* Main Visualization Card */
+                        React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
+                            
+                            /* Legend */
+                            React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 pb-4 border-b border-slate-700" },
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.comparing.split(' ')[0]}` }), "Comparing"
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.swapping.split(' ')[0]}` }), "Swapping"
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.default.split(' ')[0]}` }), "Idle"
+                                )
+                            ),
+
+                            /* Array Representation Strip */
+                            React.createElement("div", { className: "flex flex-col items-center w-full" },
+                                React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Representation"),
+                                React.createElement("div", { className: "flex flex-wrap justify-center gap-1" },
+                                    displayArray.map((val, idx) => {
+                                        const colorClass = getNodeColor(idx);
+                                        const baseStyle = "w-10 h-10 flex flex-col items-center justify-center rounded-md border font-mono font-bold transition-all duration-300";
+                                        return React.createElement("div", { key: idx, className: `${baseStyle} ${colorClass}` },
+                                            React.createElement("span", { className: "text-sm leading-none" }, val),
+                                            React.createElement("span", { className: "text-[8px] opacity-60 leading-none mt-0.5" }, idx)
+                                        );
+                                    })
+                                )
+                            ),
+
+                            /* Tree Representation Area */
+                            React.createElement("div", { className: "relative w-full min-h-[400px] bg-slate-900/50 rounded-lg p-6 flex flex-col items-center justify-start overflow-hidden mt-2 border border-slate-800" },
+                                React.createElement("h3", { className: "absolute top-4 left-4 text-xs font-bold tracking-wider text-slate-500 uppercase z-0" }, "Tree Structure"),
+                                
+                                /* Background Grid Pattern */
+                                React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                                
+                                /* The Tree */
+                                renderTree()
+                            ),
+
+                            /* Footer Progress */
+                            React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                                React.createElement("span", null, `STEP ${currentStepIndex} / ${steps.length > 0 ? steps.length - 1 : 0}`),
+                                React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full mx-4 hidden sm:block" },
+                                    React.createElement("div", { 
+                                    className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                    style: { width: `${steps.length > 1 ? (currentStepIndex / (steps.length - 1)) * 100 : 0}%` }
+                                    })
+                                ),
+                                React.createElement("span", null, isPlaying ? "Animating..." : "Ready")
+                            )
+                        )
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(BinaryHeapVisualizer));
+    </script>
+</body>
+</html>

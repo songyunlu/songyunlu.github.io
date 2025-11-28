@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trie (Prefix Tree) Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+
+        /* Tree connector lines */
+        .tree-line {
+            transition: all 0.3s ease;
+        }
+
+        /* Node Animation */
+        .node-enter {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useMemo } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipForward, RotateCcw, GitMerge, Search, Plus, Trash2, X, ZoomIn, ZoomOut, Maximize, Activity, Settings, Zap } from 'lucide-react';
+
+        // -- Unique ID Generator --
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+
+        const TrieVisualizer = () => {
+            // -- State --
+            const [animationSpeed, setAnimationSpeed] = useState(500); 
+            // Trie Data Structure: Root Node
+            const [trieRoot, setTrieRoot] = useState({ id: 'root', char: '', children: {}, isEndOfWord: false });
+            const [inputValue, setInputValue] = useState("");
+            const [zoom, setZoom] = useState(1);
+            
+            // Animation State
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-700 border-slate-600 text-slate-200',
+                visiting: 'bg-amber-600 border-amber-400 text-amber-50 shadow-[0_0_15px_rgba(245,158,11,0.5)]', 
+                found: 'bg-emerald-600 border-emerald-400 text-emerald-50 shadow-[0_0_15px_rgba(16,185,129,0.5)]', 
+                new: 'bg-pink-600 border-pink-400 text-pink-50 shadow-[0_0_15px_rgba(236,72,153,0.5)]',
+                error: 'bg-rose-600 border-rose-400 text-rose-50',
+                endNode: 'ring-2 ring-emerald-400' // Ring for end of word nodes
+            };
+
+            // -- Deep Copy Helper --
+            const cloneTrie = (node) => {
+                const newNode = { ...node, children: {} };
+                for (const key in node.children) {
+                    newNode.children[key] = cloneTrie(node.children[key]);
+                }
+                return newNode;
+            };
+
+            // -- Logic --
+
+            // Helper to insert without animation for initialization
+            const insertStatic = (root, word) => {
+                let node = root;
+                for (const char of word) {
+                    if (!node.children[char]) {
+                        node.children[char] = { 
+                            id: generateId(), 
+                            char: char, 
+                            children: {}, 
+                            isEndOfWord: false 
+                        };
+                    }
+                    node = node.children[char];
+                }
+                node.isEndOfWord = true;
+            };
+
+            const reset = () => {
+                const initialRoot = { id: 'root', char: '', children: {}, isEndOfWord: false };
+                
+                // Initialize with some random words of length 3-6
+                const potentialWords = [
+                    // 3 chars
+                    "cat", "dog", "run", "sky", "fox", "bat", "ant", "zoo",
+                    // 4 chars
+                    "code", "data", "tree", "jump", "moon", "star", "fish", "bird",
+                    // 5 chars
+                    "apple", "beach", "cloud", "dance", "grape", "mango", "lemon",
+                    // 6 chars
+                    "banana", "cherry", "forest", "planet", "rocket", "spirit", "orange"
+                ];
+
+                // Pick 4-6 random words
+                const count = Math.floor(Math.random() * 3) + 4; 
+                const shuffled = potentialWords.sort(() => 0.5 - Math.random());
+                const selected = shuffled.slice(0, count);
+                
+                selected.forEach(word => insertStatic(initialRoot, word));
+
+                setTrieRoot(initialRoot);
+                setSteps([{
+                    root: initialRoot,
+                    highlight: [],
+                    message: `Initialized with: ${selected.join(", ")}`,
+                    status: 'idle'
+                }]);
+                setCurrentStepIndex(0);
+                setIsPlaying(false);
+            };
+
+            // Initialize
+            useEffect(() => {
+                reset();
+            }, []);
+
+
+            // 1. INSERT OPERATION
+            const handleInsert = () => {
+                const word = inputValue.toLowerCase().replace(/[^a-z]/g, '');
+                if (!word) return;
+
+                const newSteps = [];
+                // Start with current state
+                let currentRoot = cloneTrie(trieRoot); 
+                let currentNode = currentRoot;
+
+                newSteps.push({
+                    root: cloneTrie(currentRoot),
+                    highlight: [currentNode.id],
+                    message: `Starting insertion for "${word}".`,
+                    status: 'visiting'
+                });
+
+                for (let i = 0; i < word.length; i++) {
+                    const char = word[i];
+                    
+                    // Check if child exists
+                    if (currentNode.children[char]) {
+                        currentNode = currentNode.children[char];
+                        newSteps.push({
+                            root: cloneTrie(currentRoot),
+                            highlight: [currentNode.id],
+                            message: `Character '${char}' exists. Moving down.`,
+                            status: 'visiting'
+                        });
+                    } else {
+                        // Create new node
+                        const newNodeId = generateId();
+                        currentNode.children[char] = { 
+                            id: newNodeId, 
+                            char: char, 
+                            children: {}, 
+                            isEndOfWord: false 
+                        };
+                        
+                        // Reference strictly for traversal, but we need to record the state update
+                        currentNode = currentNode.children[char];
+
+                        newSteps.push({
+                            root: cloneTrie(currentRoot),
+                            highlight: [currentNode.id],
+                            message: `Character '${char}' not found. Creating new node.`,
+                            status: 'new'
+                        });
+                    }
+                }
+
+                // Mark end of word
+                if (!currentNode.isEndOfWord) {
+                    currentNode.isEndOfWord = true;
+                    newSteps.push({
+                        root: cloneTrie(currentRoot),
+                        highlight: [currentNode.id],
+                        message: `Marking '${word[word.length-1]}' as end of word "${word}".`,
+                        status: 'found'
+                    });
+                } else {
+                    newSteps.push({
+                        root: cloneTrie(currentRoot),
+                        highlight: [currentNode.id],
+                        message: `Word "${word}" already exists.`,
+                        status: 'found'
+                    });
+                }
+
+                newSteps.push({
+                    root: cloneTrie(currentRoot),
+                    highlight: [],
+                    message: `Insertion of "${word}" Complete.`,
+                    status: 'idle'
+                });
+
+                setSteps(newSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+                setInputValue("");
+            };
+
+            // 2. SEARCH OPERATION
+            const handleSearch = () => {
+                const word = inputValue.toLowerCase().replace(/[^a-z]/g, '');
+                if (!word) return;
+
+                const newSteps = [];
+                const currentRoot = trieRoot; // Read-only for search steps, no cloning needed until visualizing? 
+                // Actually we need to store 'root' in steps to keep the frame consistent, even if it doesn't change structure.
+                
+                let currentNode = currentRoot;
+                newSteps.push({
+                    root: currentRoot,
+                    highlight: [currentNode.id],
+                    message: `Searching for "${word}"...`,
+                    status: 'visiting'
+                });
+
+                for (let i = 0; i < word.length; i++) {
+                    const char = word[i];
+                    
+                    if (currentNode.children[char]) {
+                        currentNode = currentNode.children[char];
+                        newSteps.push({
+                            root: currentRoot,
+                            highlight: [currentNode.id],
+                            message: `Found '${char}'. Continuing...`,
+                            status: 'visiting'
+                        });
+                    } else {
+                        newSteps.push({
+                            root: currentRoot,
+                            highlight: [currentNode.id], // Highlight where we failed
+                            message: `Character '${char}' not found. Word does not exist.`,
+                            status: 'error'
+                        });
+                        setSteps(newSteps);
+                        setCurrentStepIndex(0);
+                        setIsPlaying(true);
+                        return;
+                    }
+                }
+
+                if (currentNode.isEndOfWord) {
+                    newSteps.push({
+                        root: currentRoot,
+                        highlight: [currentNode.id],
+                        message: `Word "${word}" found!`,
+                        status: 'found'
+                    });
+                } else {
+                    newSteps.push({
+                        root: currentRoot,
+                        highlight: [currentNode.id],
+                        message: `Prefix "${word}" exists, but it's not marked as a complete word.`,
+                        status: 'visiting' // Or warning
+                    });
+                }
+
+                setSteps(newSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+            };
+
+            // 3. DELETE OPERATION
+            const handleDelete = () => {
+                const word = inputValue.toLowerCase().replace(/[^a-z]/g, '');
+                if (!word) return;
+
+                const newSteps = [];
+                let currentRoot = cloneTrie(trieRoot);
+
+                // Helper to perform delete recursively and track steps
+                // Returns true if child should be deleted from parent
+                const deleteRecursively = (node, depth) => {
+                    // Highlight current traversal
+                    newSteps.push({
+                        root: cloneTrie(currentRoot),
+                        highlight: [node.id],
+                        message: `Traversing to '${word[depth] || 'end'}'...`,
+                        status: 'visiting'
+                    });
+
+                    // Base Case: End of word string
+                    if (depth === word.length) {
+                        if (!node.isEndOfWord) {
+                            newSteps.push({
+                                root: cloneTrie(currentRoot),
+                                highlight: [node.id],
+                                message: `Word "${word}" not found (not marked as end).`,
+                                status: 'error'
+                            });
+                            return false; 
+                        }
+
+                        // Unmark end of word
+                        node.isEndOfWord = false;
+                        newSteps.push({
+                            root: cloneTrie(currentRoot),
+                            highlight: [node.id],
+                            message: `Unmarked end-of-word for "${word}".`,
+                            status: 'found' // using found color to show success action
+                        });
+
+                        // Check if node has no children; if so, it can be pruned
+                        return Object.keys(node.children).length === 0;
+                    }
+
+                    const char = word[depth];
+                    if (!node.children[char]) {
+                         newSteps.push({
+                            root: cloneTrie(currentRoot),
+                            highlight: [node.id],
+                            message: `Path for "${word}" not found.`,
+                            status: 'error'
+                        });
+                        return false;
+                    }
+
+                    const shouldDeleteChild = deleteRecursively(node.children[char], depth + 1);
+
+                    if (shouldDeleteChild) {
+                        delete node.children[char];
+                        newSteps.push({
+                            root: cloneTrie(currentRoot),
+                            highlight: [node.id],
+                            message: `Pruning child '${char}' as it's no longer needed.`,
+                            status: 'swapping' // Using swapping color (indigo) for delete action
+                        });
+                        
+                        // Return true if this node itself is now useless (no children, not end of word)
+                        return Object.keys(node.children).length === 0 && !node.isEndOfWord && node.id !== 'root';
+                    }
+
+                    return false;
+                };
+
+                deleteRecursively(currentRoot, 0);
+
+                newSteps.push({
+                    root: cloneTrie(currentRoot),
+                    highlight: [],
+                    message: `Deletion complete.`,
+                    status: 'idle'
+                });
+
+                setSteps(newSteps);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+                setInputValue("");
+            };
+
+
+            // -- Playback Effect --
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                setTrieRoot(steps[steps.length - 1].root);
+                                return prev;
+                            }
+                        });
+                    }, 2000 - animationSpeed);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps, animationSpeed]);
+
+
+            // -- Helpers for rendering --
+            
+            // Collect all words currently in Trie for the "Dictionary" view
+            const getAllWords = (node = trieRoot, currentWord = "", words = []) => {
+                if (node.isEndOfWord) words.push(currentWord);
+                Object.keys(node.children).sort().forEach(key => {
+                    getAllWords(node.children[key], currentWord + key, words);
+                });
+                return words;
+            };
+
+            const dictionary = useMemo(() => {
+                const currentStep = steps[currentStepIndex];
+                const rootToUse = currentStep ? currentStep.root : trieRoot;
+                return getAllWords(rootToUse);
+            }, [steps, currentStepIndex, trieRoot]);
+
+
+            // -- Layout Algorithm --
+            // Calculates x, y for every node in the tree
+            const calculateLayout = (rootNode) => {
+                const nodeSize = 50;
+                const levelHeight = 80;
+                let minX = 0;
+                let maxX = 0;
+                
+                // 1. Assign widths to subtrees (Post-Order)
+                const assignWidths = (node) => {
+                    if (!node) return 0;
+                    const childrenKeys = Object.keys(node.children).sort();
+                    
+                    if (childrenKeys.length === 0) {
+                        node.width = nodeSize + 20; // Base width for leaf
+                    } else {
+                        let childrenWidth = 0;
+                        childrenKeys.forEach(key => {
+                            childrenWidth += assignWidths(node.children[key]);
+                        });
+                        node.width = Math.max(nodeSize + 20, childrenWidth);
+                    }
+                    return node.width;
+                };
+
+                // 2. Assign coordinates (Pre-Order)
+                const assignCoords = (node, x, y) => {
+                    if (!node) return [];
+                    
+                    // Update bounds
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+
+                    const flatNodes = [{
+                        ...node,
+                        x,
+                        y
+                    }];
+
+                    const childrenKeys = Object.keys(node.children).sort();
+                    let currentLeftX = x - (node.width / 2);
+                    
+                    childrenKeys.forEach(key => {
+                        const child = node.children[key];
+                        const childX = currentLeftX + (child.width / 2);
+                        flatNodes.push(...assignCoords(child, childX, y + levelHeight));
+                        currentLeftX += child.width;
+                    });
+                    
+                    return flatNodes;
+                };
+
+                // Clone structure to avoid mutating state directly during render calculations
+                const layoutRoot = JSON.parse(JSON.stringify(rootNode)); 
+                assignWidths(layoutRoot);
+                // Start root at 0, we will shift later
+                const computedNodes = assignCoords(layoutRoot, 0, 60); 
+                
+                return { nodes: computedNodes, bounds: { minX, maxX } };
+            };
+
+
+            const currentStep = steps[currentStepIndex] || { root: trieRoot, highlight: [], status: 'idle', message: "Ready" };
+            
+            // Memoize layout calculation to prevent jitter
+            const { nodes: layoutNodes, bounds } = useMemo(() => calculateLayout(currentStep.root), [currentStep.root]);
+
+
+            // Render Tree
+            const renderTree = () => {
+                // Calculate centering offsets
+                const padding = 100; // Horizontal padding
+                const treeWidth = bounds.maxX - bounds.minX;
+                const containerWidth = treeWidth + (padding * 2);
+                const xOffset = -bounds.minX + padding;
+
+                // Connections
+                const lines = [];
+                layoutNodes.forEach(node => {
+                    Object.keys(node.children).forEach(key => {
+                        const childId = node.children[key].id;
+                        const childNode = layoutNodes.find(n => n.id === childId);
+                        if (childNode) {
+                            lines.push(
+                                React.createElement("line", {
+                                    key: `link-${node.id}-${childNode.id}`,
+                                    x1: node.x + xOffset,
+                                    y1: node.y,
+                                    x2: childNode.x + xOffset,
+                                    y2: childNode.y,
+                                    stroke: "#475569",
+                                    strokeWidth: "2",
+                                    className: "tree-line"
+                                })
+                            );
+                        }
+                    });
+                });
+
+                // Nodes
+                const nodes = layoutNodes.map(node => {
+                    let colorClass = COLORS.default;
+                    
+                    // Logic to determine color based on animation state
+                    if (currentStep.highlight.includes(node.id)) {
+                        if (currentStep.status === 'visiting') colorClass = COLORS.visiting;
+                        else if (currentStep.status === 'found') colorClass = COLORS.found;
+                        else if (currentStep.status === 'new') colorClass = COLORS.new;
+                        else if (currentStep.status === 'error') colorClass = COLORS.error;
+                        else if (currentStep.status === 'swapping') colorClass = COLORS.visiting; // Delete prune
+                    }
+
+                    // Special indicator for End Of Word
+                    const isEnd = node.isEndOfWord;
+                    const ringClass = isEnd ? "ring-4 ring-emerald-500/50" : "";
+
+                    return React.createElement("div", {
+                        key: node.id,
+                        className: `absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-10 transition-all duration-500 ease-in-out node-enter`,
+                        style: { left: node.x + xOffset, top: node.y }
+                    },
+                        React.createElement("div", {
+                            className: `w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold border-2 shadow-xl transition-colors duration-300 ${colorClass} ${ringClass}`
+                        }, node.char || "*"), // Root gets *
+                    );
+                });
+
+                return React.createElement("div", { 
+                    className: "relative w-full overflow-hidden bg-slate-900/50 rounded-lg border border-slate-800 flex flex-col",
+                    style: { height: '650px' } 
+                },
+                    /* Zoom Controls */
+                    React.createElement("div", { 
+                        className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 backdrop-blur border border-slate-700 p-2 rounded-lg z-50 shadow-xl" 
+                    },
+                         React.createElement("button", {
+                            onClick: () => setZoom(z => Math.min(z + 0.1, 2)),
+                            className: "p-2 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition-colors",
+                            title: "Zoom In"
+                        }, React.createElement(ZoomIn, { size: 20 })),
+                         React.createElement("button", {
+                            onClick: () => setZoom(z => Math.max(z - 0.1, 0.4)),
+                            className: "p-2 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition-colors",
+                            title: "Zoom Out"
+                        }, React.createElement(ZoomOut, { size: 20 })),
+                        React.createElement("div", { className: "h-px bg-slate-700 my-0.5" }),
+                         React.createElement("button", {
+                            onClick: () => setZoom(1),
+                            className: "p-2 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition-colors",
+                            title: "Reset Zoom"
+                        }, React.createElement(Maximize, { size: 20 }))
+                    ),
+
+                    /* Scrollable Area */
+                    React.createElement("div", { 
+                        className: "w-full h-full overflow-auto custom-scrollbar flex justify-center p-10",
+                    },
+                         /* Zoomable Container */
+                        React.createElement("div", { 
+                            className: "relative transition-transform duration-200 ease-out origin-top", 
+                            style: { 
+                                width: `${containerWidth}px`,
+                                height: '1200px', // Large height for expansion
+                                minWidth: 'fit-content',
+                                transform: `scale(${zoom})`
+                            }
+                        },
+                            /* SVG Layer */
+                            React.createElement("svg", {
+                                className: "absolute top-0 left-0 w-full h-full pointer-events-none z-0"
+                            }, lines),
+                            /* Nodes */
+                            nodes
+                        )
+                    )
+                );
+            };
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                    /* Title (Full Width) */
+                    React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
+                        React.createElement(GitMerge, { size: 32, className: "text-indigo-400 -rotate-90" }), 
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Trie Visualizer")
+                    ),
+
+                    /* Main Layout: Sidebar (Left) + Content (Right) */
+                    React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
+                        
+                        /* Sidebar: Controls & Actions */
+                        React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
+                            
+                            /* Settings & Actions Card (Now First) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-5" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                    React.createElement(Settings, { size: 14 }), "Actions"
+                                ),
+                                
+                                /* Input */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("span", { className: "text-xs text-slate-400" }, "Word Input"),
+                                    React.createElement("input", { 
+                                        type: "text",
+                                        value: inputValue,
+                                        onChange: (e) => setInputValue(e.target.value.toLowerCase().slice(0, 10)),
+                                        maxLength: 10,
+                                        className: "bg-slate-900 border border-slate-600 rounded-lg px-3 py-2.5 w-full text-slate-200 focus:outline-none focus:border-indigo-500 font-mono tracking-wider text-sm",
+                                        placeholder: "type word..."
+                                    })
+                                ),
+
+                                /* Action Buttons */
+                                React.createElement("div", { className: "flex flex-col gap-2.5" },
+                                    React.createElement("button", {
+                                        onClick: handleInsert,
+                                        disabled: isPlaying || !inputValue,
+                                        className: "flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white w-full px-4 py-2.5 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                                    }, 
+                                    React.createElement(Plus, { size: 16 }), "Insert"
+                                    ),
+
+                                    React.createElement("button", {
+                                        onClick: handleSearch,
+                                        disabled: isPlaying || !inputValue,
+                                        className: "flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white w-full px-4 py-2.5 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                                    }, 
+                                    React.createElement(Search, { size: 16 }), "Search"
+                                    ),
+
+                                    React.createElement("button", {
+                                        onClick: handleDelete,
+                                        disabled: isPlaying || !inputValue,
+                                        className: "flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white w-full px-4 py-2.5 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                                    }, 
+                                    React.createElement(Trash2, { size: 16 }), "Delete"
+                                    )
+                                )
+                            ),
+
+                            /* Playback Controls Card (Now Second) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                    React.createElement(Activity, { size: 14 }), "Playback Controls"
+                                ),
+                                React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                    React.createElement("button", { onClick: reset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "Reset" },
+                                        React.createElement(RotateCcw, { size: 18 })
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("button", { 
+                                            onClick: () => { setIsPlaying(!isPlaying); }, 
+                                            disabled: steps.length <= 1 || currentStepIndex === steps.length -1,
+                                            className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        },
+                                            isPlaying 
+                                                ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                                : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                        ),
+                                        React.createElement("button", { 
+                                            onClick: () => {
+                                                if(currentStepIndex < steps.length - 1) {
+                                                    setCurrentStepIndex(prev => prev + 1);
+                                                    setIsPlaying(false);
+                                                }
+                                            },
+                                            disabled: currentStepIndex === steps.length - 1,
+                                            className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" 
+                                        },
+                                            React.createElement(SkipForward, { size: 18 })
+                                        )
+                                    )
+                                ),
+
+                                /* Divider */
+                                React.createElement("div", { className: "h-px w-full bg-slate-700/50 my-1" }),
+
+                                /* Speed Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                        React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "100", max: "1900", step: "100",
+                                        value: animationSpeed,
+                                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    })
+                                )
+                            )
+                        ),
+
+                        /* Main Content (Right) */
+                        React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4" },
+                            
+                            /* Description Box */
+                            React.createElement("div", { className: "w-full min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-lg" },
+                                React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center" }, currentStep.message)
+                            ),
+
+                            /* Main Content Box */
+                            React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
+                                
+                                /* Legend */
+                                React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 pb-4 border-b border-slate-700" },
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.visiting.split(' ')[0]}` }), "Visiting"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.new.split(' ')[0]}` }), "Creating"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.found.split(' ')[0]}` }), "Found/End"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-3 h-3 rounded-full border-2 border-emerald-500 bg-transparent` }), "Word End Marker"
+                                    )
+                                ),
+
+                                /* Dictionary Representation */
+                                React.createElement("div", { className: "flex flex-col items-center w-full" },
+                                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Dictionary (Stored Words)"),
+                                    React.createElement("div", { className: "flex flex-wrap justify-center gap-2 min-h-[40px]" },
+                                        dictionary.length === 0 
+                                            ? React.createElement("span", { className: "text-slate-600 italic text-sm" }, "Empty")
+                                            : dictionary.map((word, idx) => 
+                                                React.createElement("span", { 
+                                                    key: idx, 
+                                                    className: "px-3 py-1 bg-slate-700 rounded-md text-emerald-400 font-mono font-medium text-sm border border-slate-600"
+                                                }, word)
+                                            )
+                                    )
+                                ),
+
+                                /* Tree Representation Area */
+                                React.createElement("div", { className: "relative w-full" },
+                                    React.createElement("h3", { className: "absolute top-4 left-4 text-xs font-bold tracking-wider text-slate-500 uppercase z-10" }, "Trie Structure"),
+                                    
+                                    /* Background Grid Pattern */
+                                    React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none z-0", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                                    
+                                    /* The Tree */
+                                    renderTree()
+                                ),
+
+                                /* Footer Progress */
+                                React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                                    React.createElement("span", null, `STEP ${currentStepIndex} / ${steps.length > 0 ? steps.length - 1 : 0}`),
+                                    React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full mx-4 hidden sm:block" },
+                                        React.createElement("div", { 
+                                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                        style: { width: `${steps.length > 1 ? (currentStepIndex / (steps.length - 1)) * 100 : 0}%` }
+                                        })
+                                    ),
+                                    React.createElement("span", null, isPlaying ? "Animating..." : "Ready")
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(TrieVisualizer));
+    </script>
+</body>
+</html>

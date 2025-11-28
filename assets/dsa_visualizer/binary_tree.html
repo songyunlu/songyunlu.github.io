@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binary Tree Types Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+
+        /* Tree connector lines */
+        .tree-line {
+            transition: all 0.5s ease;
+        }
+
+        /* Smooth node transitions */
+        .node-enter {
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes popIn {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { GitBranch, RefreshCw, Info, Check, AlertCircle, LayoutGrid, Network, Play, Pause, RotateCcw, SkipBack, SkipForward, ArrowRight } from 'lucide-react';
+
+        const TreeVisualizer = () => {
+            // -- URL Parameter Parsing --
+            const getInitialState = () => {
+                const params = new URLSearchParams(window.location.search);
+                const sizeParam = parseInt(params.get('size'));
+                const structureParam = params.get('structure');
+                
+                let initialCount = 7;
+                // Validate size (1-15)
+                if (!isNaN(sizeParam) && sizeParam >= 1 && sizeParam <= 15) {
+                    initialCount = sizeParam;
+                }
+
+                let initialType = 'binary';
+                const validTypes = ['binary', 'complete', 'full', 'perfect'];
+                // Validate structure type
+                if (validTypes.includes(structureParam)) {
+                    initialType = structureParam;
+                }
+
+                return { count: initialCount, type: initialType };
+            };
+
+            const initialState = getInitialState();
+
+            // -- State --
+            const [treeType, setTreeType] = useState(initialState.type); 
+            const [nodeCount, setNodeCount] = useState(initialState.count);
+            const [nodes, setNodes] = useState([]); // Array of { val: number, i: number }
+            
+            // Traversal State
+            const [traversalType, setTraversalType] = useState(null); // 'in', 'pre', 'post', 'level'
+            const [traversalPath, setTraversalPath] = useState([]); // Array of nodes in order
+            const [currentStep, setCurrentStep] = useState(-1);
+            const [isAnimating, setIsAnimating] = useState(false);
+            const [speed, setSpeed] = useState(800); // ms per step
+            
+            const timerRef = useRef(null);
+
+            // -- Definitions --
+            const DEFINITIONS = {
+                binary: {
+                    title: "General Binary Tree",
+                    desc: "A tree data structure in which each node has at most two children.",
+                    rule: "No strict structural constraints other than max 2 children.",
+                    color: "text-blue-400",
+                    bg: "bg-blue-500/10 border-blue-500/20"
+                },
+                complete: {
+                    title: "Complete Binary Tree",
+                    desc: "Every level, except possibly the last, is completely filled, and all nodes in the last level are as far left as possible.",
+                    rule: "Indices are sequential (0, 1, 2, ... n).",
+                    color: "text-emerald-400",
+                    bg: "bg-emerald-500/10 border-emerald-500/20"
+                },
+                full: {
+                    title: "Full Binary Tree",
+                    desc: "Every node has either 0 or 2 children. No node has exactly one child.",
+                    rule: "Nodes count must be odd (2k + 1).",
+                    color: "text-amber-400",
+                    bg: "bg-amber-500/10 border-amber-500/20"
+                },
+                perfect: {
+                    title: "Perfect Binary Tree",
+                    desc: "All interior nodes have two children and all leaves are at the same depth.",
+                    rule: "Size must be exactly 2^(h+1) - 1.",
+                    color: "text-pink-400",
+                    bg: "bg-pink-500/10 border-pink-500/20"
+                }
+            };
+
+            // -- Generators --
+
+            const generateRandomVal = () => Math.floor(Math.random() * 99) + 1;
+
+            const generateTree = useCallback(() => {
+                // Stop any ongoing animation
+                stopTraversal();
+
+                let newNodes = [];
+                const MAX_INDEX = 30; // Prevent visual overflow
+
+                if (treeType === 'complete') {
+                    for (let i = 0; i < nodeCount; i++) {
+                        newNodes.push({ val: generateRandomVal(), i: i });
+                    }
+                } 
+                else if (treeType === 'perfect') {
+                    let count = 1;
+                    if (nodeCount >= 3) count = 3;
+                    if (nodeCount >= 7) count = 7;
+                    if (nodeCount >= 15) count = 15;
+                    for (let i = 0; i < count; i++) {
+                        newNodes.push({ val: generateRandomVal(), i: i });
+                    }
+                }
+                else if (treeType === 'full') {
+                    newNodes.push({ val: generateRandomVal(), i: 0 });
+                    const targetPairs = Math.floor((nodeCount - 1) / 2);
+                    for (let p = 0; p < targetPairs; p++) {
+                        const occupiedIndices = new Set(newNodes.map(n => n.i));
+                        const leaves = newNodes.filter(n => {
+                            const left = 2 * n.i + 1;
+                            const right = 2 * n.i + 2;
+                            return !occupiedIndices.has(left) && !occupiedIndices.has(right);
+                        });
+                        const validLeaves = leaves.filter(l => (2 * l.i + 2) < MAX_INDEX);
+                        if (validLeaves.length === 0) break;
+                        const randomLeaf = validLeaves[Math.floor(Math.random() * validLeaves.length)];
+                        newNodes.push({ val: generateRandomVal(), i: 2 * randomLeaf.i + 1 });
+                        newNodes.push({ val: generateRandomVal(), i: 2 * randomLeaf.i + 2 });
+                    }
+                }
+                else {
+                    newNodes.push({ val: generateRandomVal(), i: 0 });
+                    for (let k = 1; k < nodeCount; k++) {
+                        let added = false;
+                        let attempts = 0;
+                        while (!added && attempts < 50) {
+                            const parent = newNodes[Math.floor(Math.random() * newNodes.length)];
+                            const isLeft = Math.random() > 0.5;
+                            const targetIndex = isLeft ? 2 * parent.i + 1 : 2 * parent.i + 2;
+                            if (!newNodes.some(n => n.i === targetIndex) && targetIndex < MAX_INDEX) {
+                                newNodes.push({ val: generateRandomVal(), i: targetIndex });
+                                added = true;
+                            }
+                            attempts++;
+                        }
+                    }
+                }
+                setNodes(newNodes.sort((a, b) => a.i - b.i));
+            }, [treeType, nodeCount]);
+
+            useEffect(() => {
+                generateTree();
+            }, [treeType, generateTree]);
+
+
+            // -- Traversal Logic --
+
+            const stopTraversal = () => {
+                setIsAnimating(false);
+                setCurrentStep(-1);
+                setTraversalType(null);
+                setTraversalPath([]);
+                if (timerRef.current) clearInterval(timerRef.current);
+            };
+
+            const startTraversal = (type) => {
+                stopTraversal();
+                setTraversalType(type);
+                
+                // Build path based on current nodes state
+                let path = [];
+                const findNode = (i) => nodes.find(n => n.i === i);
+
+                if (type === 'level') {
+                    path = [...nodes].sort((a, b) => a.i - b.i);
+                } else {
+                    const recurse = (currIndex) => {
+                        const node = findNode(currIndex);
+                        if (!node) return;
+    
+                        if (type === 'pre') path.push(node);
+                        recurse(2 * currIndex + 1); // Left
+                        if (type === 'in') path.push(node);
+                        recurse(2 * currIndex + 2); // Right
+                        if (type === 'post') path.push(node);
+                    };
+                    recurse(0); // Start at root
+                }
+
+                setTraversalPath(path);
+                setCurrentStep(-1);
+                setIsAnimating(true);
+            };
+
+            // Playback Controls
+            const togglePlay = () => setIsAnimating(!isAnimating);
+            
+            const stepForward = () => {
+                setIsAnimating(false);
+                setCurrentStep(prev => Math.min(prev + 1, traversalPath.length - 1));
+            };
+
+            const stepBack = () => {
+                setIsAnimating(false);
+                setCurrentStep(prev => Math.max(prev - 1, -1));
+            };
+
+            const resetPlayback = () => {
+                setIsAnimating(false);
+                setCurrentStep(-1);
+            };
+
+            // Animation Loop
+            useEffect(() => {
+                if (isAnimating && traversalPath.length > 0) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStep(prev => {
+                            if (prev < traversalPath.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsAnimating(false);
+                                return prev;
+                            }
+                        });
+                    }, speed);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isAnimating, traversalPath, speed]);
+
+
+            // -- Rendering Logic --
+
+            const renderTree = () => {
+                if (nodes.length === 0) return null;
+
+                const maxIndex = Math.max(...nodes.map(n => n.i));
+                const levels = Math.floor(Math.log2(maxIndex + 1)) + 1;
+                const verticalGap = 80;
+                const containerHeight = Math.max(350, levels * verticalGap + 100);
+                
+                const getPosition = (index) => {
+                    const level = Math.floor(Math.log2(index + 1));
+                    const maxNodesInLevel = Math.pow(2, level);
+                    const positionInLevel = index - (maxNodesInLevel - 1);
+                    const x = (positionInLevel * 2 + 1) * (100 / (2 * maxNodesInLevel));
+                    const y = level * verticalGap + 60;
+                    return { x, y };
+                };
+
+                // Lines
+                const lines = [];
+                nodes.forEach(node => {
+                    if (node.i === 0) return;
+                    const parentIdx = Math.floor((node.i - 1) / 2);
+                    const parentNode = nodes.find(n => n.i === parentIdx);
+                    
+                    if (parentNode) {
+                        const start = getPosition(parentNode.i);
+                        const end = getPosition(node.i);
+                        lines.push(
+                            React.createElement("line", {
+                                key: `line-${parentNode.i}-${node.i}`,
+                                x1: `${start.x}%`,
+                                y1: start.y,
+                                x2: `${end.x}%`,
+                                y2: end.y,
+                                stroke: "#475569", 
+                                strokeWidth: "2",
+                                className: "tree-line"
+                            })
+                        );
+                    }
+                });
+
+                // Nodes
+                const nodeElements = nodes.map((node) => {
+                    const pos = getPosition(node.i);
+                    const isLeaf = !nodes.some(n => n.i === 2*node.i + 1 || n.i === 2*node.i + 2);
+                    
+                    let nodeColor = isLeaf ? "bg-slate-700 border-indigo-500" : "bg-slate-800 border-slate-500";
+                    let scale = "scale-100";
+                    let shadow = "shadow-lg";
+                    let textColor = "text-slate-200";
+
+                    if (currentStep >= 0) {
+                        const visitedNode = traversalPath[currentStep];
+                        const visitedIndex = visitedNode ? visitedNode.i : -1;
+                        
+                        const isVisited = traversalPath.slice(0, currentStep + 1).some(n => n.i === node.i);
+                        const isCurrent = node.i === visitedIndex;
+
+                        if (isCurrent) {
+                            nodeColor = "bg-amber-500 border-amber-300";
+                            textColor = "text-white";
+                            scale = "scale-125 z-50";
+                            shadow = "shadow-[0_0_20px_rgba(245,158,11,0.6)]";
+                        } else if (isVisited) {
+                            nodeColor = "bg-indigo-600 border-indigo-400";
+                            textColor = "text-indigo-100";
+                        } else {
+                            nodeColor = "bg-slate-800/50 border-slate-700 text-slate-500";
+                        }
+                    }
+
+                    return React.createElement("div", {
+                        key: `node-${node.i}`,
+                        className: `absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-300 ease-in-out ${scale}`,
+                        style: { left: `${pos.x}%`, top: `${pos.y}px` }
+                    },
+                        React.createElement("div", {
+                            className: `w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-sm sm:text-base font-bold border-2 ${shadow} ${textColor} transition-colors duration-300 ${nodeColor}`
+                        }, node.val),
+                        React.createElement("span", { className: "text-[10px] text-slate-500 mt-1 font-mono" }, node.i)
+                    );
+                });
+
+                return React.createElement("div", { 
+                    className: "relative w-full overflow-x-auto overflow-y-hidden custom-scrollbar bg-slate-900/50 rounded-lg border border-slate-800",
+                    style: { height: `${containerHeight}px` } 
+                },
+                     React.createElement("div", { className: "absolute top-4 left-4 z-0 text-slate-600 font-mono text-xs uppercase tracking-widest" }, "Tree Visualization"),
+                     React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                     React.createElement("div", { className: "relative w-full min-w-[600px] h-full" },
+                        React.createElement("svg", { className: "absolute top-0 left-0 w-full h-full pointer-events-none z-0" }, lines),
+                        nodeElements
+                    )
+                );
+            };
+
+            const TypeButton = ({ type, label, icon: Icon }) => {
+                const isActive = treeType === type;
+                return React.createElement("button", {
+                    onClick: () => setTreeType(type),
+                    // Changed justify-center to justify-start, increased gap and horizontal padding
+                    className: `flex items-center justify-start gap-3 px-4 py-2.5 rounded-lg font-medium text-xs sm:text-sm transition-all duration-200 w-full ${
+                        isActive 
+                        ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30 scale-105' 
+                        : 'bg-slate-900/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200 border border-slate-700/50 hover:border-slate-600'
+                    }`
+                },
+                    React.createElement(Icon, { size: 16 }),
+                    React.createElement("span", { className: "truncate" }, label)
+                );
+            };
+
+            const resultList = traversalPath.slice(0, currentStep + 1);
+            const isTraversalActive = traversalPath.length > 0;
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                /* Header */
+                React.createElement("div", { className: "w-full max-w-5xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6" },
+                    React.createElement("div", { className: "flex items-center gap-3" },
+                        React.createElement("div", { className: "p-3 bg-indigo-500/10 rounded-xl" },
+                            React.createElement(Network, { size: 32, className: "text-indigo-400" })
+                        ),
+                        React.createElement("div", null,
+                            React.createElement("h1", { className: "text-2xl font-bold text-white tracking-tight" }, "Binary Tree"),
+                            React.createElement("p", { className: "text-slate-400 text-sm" }, "Interactive Structural Visualizer")
+                        )
+                    ),
+                    // Removed the old top bar navigation
+                ),
+
+                /* Main Content Grid */
+                React.createElement("div", { className: "w-full max-w-5xl grid grid-cols-1 lg:grid-cols-4 gap-6" },
+                    
+                    /* Left Column: Controls */
+                    React.createElement("div", { className: "lg:col-span-1 flex flex-col gap-4" },
+                        
+                        /* 1. Structure Block */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg" },
+                            React.createElement("div", { className: "flex items-center justify-between mb-4" },
+                                React.createElement("h3", { className: "text-sm font-bold text-slate-300 uppercase tracking-wider" }, "Structure"),
+                                React.createElement(RefreshCw, { 
+                                    size: 16, 
+                                    className: "text-slate-500 cursor-pointer hover:text-indigo-400 transition-colors",
+                                    onClick: generateTree 
+                                })
+                            ),
+
+                            /* Tree Type Buttons */
+                            React.createElement("div", { className: "grid grid-cols-1 gap-2 mb-6" },
+                                React.createElement(TypeButton, { type: 'binary', label: 'Binary', icon: GitBranch }),
+                                React.createElement(TypeButton, { type: 'complete', label: 'Complete', icon: LayoutGrid }),
+                                React.createElement(TypeButton, { type: 'full', label: 'Full', icon: Check }),
+                                React.createElement(TypeButton, { type: 'perfect', label: 'Perfect', icon: AlertCircle }),
+                            ),
+
+                            React.createElement("div", { className: "mb-6" },
+                                React.createElement("div", { className: "flex justify-between text-xs text-slate-400 mb-2" },
+                                    // Renamed label from "Node Count" to "Size"
+                                    React.createElement("span", null, "Size"),
+                                    React.createElement("span", { className: "font-mono text-indigo-400" }, nodes.length)
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: treeType === 'perfect' ? "1" : "3", max: "15", step: treeType === 'perfect' ? "1" : "1",
+                                    value: nodeCount,
+                                    onChange: (e) => setNodeCount(Number(e.target.value)),
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                })
+                            )
+                        ),
+
+                        /* 2. Traverse Block (Buttons Only) */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg" },
+                            React.createElement("div", { className: "flex items-center justify-between mb-4" },
+                                React.createElement("h3", { className: "text-sm font-bold text-slate-300 uppercase tracking-wider" }, "Traverse"),
+                                traversalType && React.createElement("span", { className: "px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono border border-amber-500/30" }, traversalType.toUpperCase())
+                            ),
+
+                            /* Traversal Buttons */
+                            React.createElement("div", { className: "grid grid-cols-1 gap-2" },
+                                ['in', 'pre', 'post', 'level'].map(type => 
+                                    React.createElement("button", {
+                                        key: type,
+                                        onClick: () => startTraversal(type),
+                                        className: `px-4 py-2.5 rounded-lg text-xs font-medium flex items-center justify-between transition-all border ${traversalType === type ? 'bg-amber-500/10 text-amber-400 border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.1)]' : 'bg-slate-700/30 text-slate-400 border-transparent hover:bg-slate-700 hover:text-slate-200'}`
+                                    }, 
+                                        React.createElement("span", null, type.charAt(0).toUpperCase() + type.slice(1) + (type === 'level' ? '-Order' : '-Order')),
+                                        React.createElement(Play, { size: 10, className: "opacity-70" })
+                                    )
+                                )
+                            )
+                        ),
+
+                        /* 3. Playback Control Block (Transport + Speed) */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg" },
+                            React.createElement("div", { className: "flex items-center justify-between mb-4" },
+                                React.createElement("h3", { className: "text-sm font-bold text-slate-300 uppercase tracking-wider" }, "Playback Control"),
+                            ),
+                            
+                            /* Transport Controls */
+                            React.createElement("div", { className: "flex items-center justify-center gap-3 mb-5" },
+                                React.createElement("button", { 
+                                    onClick: resetPlayback,
+                                    disabled: !isTraversalActive,
+                                    className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                                }, React.createElement(RotateCcw, { size: 16 })),
+                                React.createElement("button", { 
+                                    onClick: stepBack,
+                                    disabled: !isTraversalActive || currentStep < 0,
+                                    className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                                }, React.createElement(SkipBack, { size: 16 })),
+                                React.createElement("button", { 
+                                    onClick: togglePlay,
+                                    disabled: !isTraversalActive,
+                                    className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full transition-all shadow-lg hover:shadow-indigo-500/25 active:scale-95 disabled:opacity-50 disabled:bg-slate-700"
+                                }, isAnimating ? React.createElement(Pause, { size: 20, fill: "currentColor" }) : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })),
+                                React.createElement("button", { 
+                                    onClick: stepForward,
+                                    disabled: !isTraversalActive || currentStep >= traversalPath.length - 1,
+                                    className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
+                                }, React.createElement(SkipForward, { size: 16 }))
+                            ),
+
+                            /* Speed Control */
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("div", { className: "flex justify-between text-[10px] uppercase font-bold text-slate-500" },
+                                    React.createElement("span", null, "Slower"),
+                                    React.createElement("span", null, "Faster")
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: "100", max: "2000", step: "100",
+                                    value: 2100 - speed,
+                                    onChange: (e) => setSpeed(2100 - Number(e.target.value)),
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 hover:accent-indigo-400"
+                                })
+                            )
+                        )
+                    ),
+
+                    /* Right Column: Visualization */
+                    React.createElement("div", { className: "lg:col-span-3 flex flex-col gap-4" },
+                        
+                        /* Definition Card */
+                        React.createElement("div", { className: `rounded-xl border p-5 shadow-lg transition-colors duration-500 ${DEFINITIONS[treeType].bg}` },
+                            React.createElement("div", { className: "flex items-start gap-3 mb-3" },
+                                React.createElement(Info, { className: `shrink-0 mt-0.5 ${DEFINITIONS[treeType].color}`, size: 20 }),
+                                React.createElement("h3", { className: `font-bold ${DEFINITIONS[treeType].color}` }, DEFINITIONS[treeType].title)
+                            ),
+                            React.createElement("p", { className: "text-sm text-slate-300 leading-relaxed" }, DEFINITIONS[treeType].desc)
+                        ),
+
+                        /* Visualization Panel */
+                        renderTree(),
+
+                        /* Array Representation & Traversal Result */
+                        React.createElement("div", { className: "flex flex-col gap-4" },
+                            /* Virtual Array */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg" },
+                                React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider mb-3" }, "Virtual Array (Index Based)"),
+                                React.createElement("div", { className: "flex flex-wrap gap-1" },
+                                    nodes.length === 0 
+                                    ? React.createElement("span", { className: "text-slate-600 italic text-sm" }, "Tree is empty")
+                                    : nodes.map((node, idx) => (
+                                        React.createElement("div", { key: idx, className: "flex flex-col items-center" },
+                                            React.createElement("div", { 
+                                                className: `w-8 h-8 flex items-center justify-center rounded border text-xs font-bold font-mono ${DEFINITIONS[treeType].color.replace('text-', 'border-')} bg-slate-900 text-slate-300`
+                                            }, node.val),
+                                            React.createElement("span", { className: "text-[8px] text-slate-600 mt-1" }, node.i)
+                                        )
+                                    ))
+                                )
+                            ),
+                            
+                            /* Traversal Result */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col" },
+                                React.createElement("h3", { className: "text-xs font-bold text-amber-500 uppercase tracking-wider mb-3 flex items-center justify-between" }, 
+                                    "Traversal Output",
+                                    traversalType && React.createElement("span", { className: "text-[10px] bg-amber-500/20 px-2 py-0.5 rounded text-amber-300" }, traversalType.toUpperCase())
+                                ),
+                                React.createElement("div", { className: "flex-1 bg-slate-900/50 rounded-lg p-3 border border-slate-700/50 font-mono text-sm overflow-x-auto whitespace-nowrap flex items-center gap-2 custom-scrollbar min-h-[50px]" },
+                                    resultList.length === 0 
+                                    ? React.createElement("span", { className: "text-slate-600 italic" }, "Click a traversal button to start...")
+                                    : React.createElement(React.Fragment, null, 
+                                        resultList.map((node, i) => React.createElement("span", { key: i, className: "text-indigo-300 animate-in fade-in zoom-in duration-300" }, 
+                                            node.val + (i < resultList.length - 1 ? " → " : "")
+                                        ))
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(TreeVisualizer));
+    </script>
+</body>
+</html>

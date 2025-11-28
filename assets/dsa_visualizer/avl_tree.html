@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AVL Tree Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM via ESM -->
+    <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1"
+      }
+    }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        body {
+            background-color: #0f172a; /* Slate 900 */
+        }
+
+        /* Tree connector lines */
+        .tree-line {
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="module">
+        import React, { useState, useEffect, useRef, useCallback } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Network, Plus, Trash2, RefreshCw, Scale, Info, Activity, Settings } from 'lucide-react';
+
+        const AVLTreeVisualizer = () => {
+            // -- State --
+            const [treeRoot, setTreeRoot] = useState(null);
+            const [animationSpeed, setAnimationSpeed] = useState(800); 
+            const [inputValue, setInputValue] = useState(10);
+            
+            // Animation State
+            const [steps, setSteps] = useState([]);
+            const [currentStepIndex, setCurrentStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+            const timerRef = useRef(null);
+
+            // -- Colors --
+            const COLORS = {
+                default: 'bg-slate-700 border-slate-600 text-slate-200',
+                comparing: 'bg-amber-600 border-amber-400 text-amber-50 shadow-[0_0_15px_rgba(245,158,11,0.5)]', 
+                rotating: 'bg-purple-600 border-purple-400 text-purple-50 shadow-[0_0_15px_rgba(168,85,247,0.5)]',
+                sorted: 'bg-emerald-600 border-emerald-400 text-emerald-50', 
+                new: 'bg-pink-600 border-pink-400 text-pink-50',
+                delete: 'bg-rose-600 border-rose-400 text-rose-50'
+            };
+
+            // -- AVL Logic Helpers --
+
+            // Deep clone a node/tree for history steps
+            const cloneTree = (node) => {
+                if (!node) return null;
+                return {
+                    id: node.id,
+                    value: node.value,
+                    height: node.height,
+                    left: cloneTree(node.left),
+                    right: cloneTree(node.right)
+                };
+            };
+
+            // Get height of node
+            const getHeight = (node) => node ? node.height : 0;
+
+            // Get balance factor
+            const getBalance = (node) => node ? getHeight(node.left) - getHeight(node.right) : 0;
+
+            // Update height
+            const updateHeight = (node) => {
+                if (node) {
+                    node.height = 1 + Math.max(getHeight(node.left), getHeight(node.right));
+                }
+            };
+
+            // Helpers to record steps
+            const recordStep = (tempRoot, desc, highlightIds = [], rotatingIds = []) => {
+                // Flatten tree for sorted view
+                const sorted = [];
+                const traverse = (n) => {
+                    if(!n) return;
+                    traverse(n.left);
+                    sorted.push(n.value);
+                    traverse(n.right);
+                };
+                traverse(tempRoot);
+
+                return {
+                    root: cloneTree(tempRoot),
+                    highlight: highlightIds,
+                    rotating: rotatingIds,
+                    sortedArray: sorted,
+                    description: desc
+                };
+            };
+
+            // Rotations
+            const rightRotate = (y) => {
+                let x = y.left;
+                let T2 = x.right;
+
+                // Perform rotation
+                x.right = y;
+                y.left = T2;
+
+                // Update heights
+                updateHeight(y);
+                updateHeight(x);
+
+                return x; // New root
+            };
+
+            const leftRotate = (x) => {
+                let y = x.right;
+                let T2 = y.left;
+
+                // Perform rotation
+                y.left = x;
+                x.right = T2;
+
+                // Update heights
+                updateHeight(x);
+                updateHeight(y);
+
+                return y; // New root
+            };
+
+            // -- recursive Insert --
+            const insertNode = (node, value, stepList, uniqueIdCounter, rootRef) => {
+                // 1. BST Insert
+                if (!node) {
+                    const newNode = { 
+                        id: uniqueIdCounter.current++, 
+                        value: value, 
+                        height: 1, 
+                        left: null, 
+                        right: null 
+                    };
+                    return newNode;
+                }
+
+                stepList.push(recordStep(rootRef.current, `Comparing ${value} with ${node.value}`, [node.id]));
+
+                if (value < node.value) {
+                    node.left = insertNode(node.left, value, stepList, uniqueIdCounter, rootRef);
+                } else if (value > node.value) {
+                    node.right = insertNode(node.right, value, stepList, uniqueIdCounter, rootRef);
+                } else {
+                    return node; // Duplicate keys not allowed
+                }
+
+                // 2. Update Height
+                updateHeight(node);
+
+                // 3. Get Balance
+                const balance = getBalance(node);
+
+                // 4. Check Unbalanced
+                if (Math.abs(balance) > 1) {
+                    stepList.push(recordStep(rootRef.current, `Node ${node.value} is unbalanced (Balance: ${balance}).`, [node.id], [node.id]));
+                }
+
+                // Left Left Case
+                if (balance > 1 && value < node.left.value) {
+                    stepList.push(recordStep(rootRef.current, `Performing Right Rotation on ${node.value}.`, [], [node.id, node.left.id]));
+                    const newRoot = rightRotate(node);
+                    // If the node we just rotated was the root of the whole tree, update our root reference
+                    if (node.id === rootRef.current.id) rootRef.current = newRoot;
+                    return newRoot;
+                }
+
+                // Right Right Case
+                if (balance < -1 && value > node.right.value) {
+                    stepList.push(recordStep(rootRef.current, `Performing Left Rotation on ${node.value}.`, [], [node.id, node.right.id]));
+                    const newRoot = leftRotate(node);
+                    if (node.id === rootRef.current.id) rootRef.current = newRoot;
+                    return newRoot;
+                }
+
+                // Left Right Case
+                if (balance > 1 && value > node.left.value) {
+                    stepList.push(recordStep(rootRef.current, `Left-Right Case: Left Rotate on ${node.left.value} first.`, [], [node.left.id]));
+                    node.left = leftRotate(node.left);
+                    
+                    stepList.push(recordStep(rootRef.current, `Now Right Rotate on ${node.value}.`, [], [node.id]));
+                    const newRoot = rightRotate(node);
+                    if (node.id === rootRef.current.id) rootRef.current = newRoot;
+                    return newRoot;
+                }
+
+                // Right Left Case
+                if (balance < -1 && value < node.right.value) {
+                    stepList.push(recordStep(rootRef.current, `Right-Left Case: Right Rotate on ${node.right.value} first.`, [], [node.right.id]));
+                    node.right = rightRotate(node.right);
+                    
+                    stepList.push(recordStep(rootRef.current, `Now Left Rotate on ${node.value}.`, [], [node.id]));
+                    const newRoot = leftRotate(node);
+                    if (node.id === rootRef.current.id) rootRef.current = newRoot;
+                    return newRoot;
+                }
+
+                return node;
+            };
+
+            // -- recursive Delete -- 
+            const deleteNode = (node, value, stepList, rootRef) => {
+                if (!node) return node;
+
+                stepList.push(recordStep(rootRef.current, `Searching for ${value}... At ${node.value}`, [node.id]));
+
+                if (value < node.value) {
+                    node.left = deleteNode(node.left, value, stepList, rootRef);
+                } else if (value > node.value) {
+                    node.right = deleteNode(node.right, value, stepList, rootRef);
+                } else {
+                    // Found node
+                    stepList.push(recordStep(rootRef.current, `Found ${value}. Deleting.`, [], [node.id]));
+                    
+                    if (!node.left || !node.right) {
+                        let temp = node.left ? node.left : node.right;
+                        if (!temp) {
+                            // No child case
+                            if (node.id === rootRef.current.id) rootRef.current = null;
+                            node = null;
+                        } else {
+                            // One child case
+                            if (node.id === rootRef.current.id) rootRef.current = temp;
+                            node = temp;
+                        }
+                    } else {
+                        // Two children: Get inorder successor
+                        let temp = node.right;
+                        while (temp.left) temp = temp.left;
+                        
+                        node.value = temp.value; 
+                        stepList.push(recordStep(rootRef.current, `Replaced with successor ${temp.value}. Now deleting original successor.`, [node.id]));
+                        node.right = deleteNode(node.right, temp.value, stepList, rootRef);
+                    }
+                }
+
+                if (!node) return node;
+
+                updateHeight(node);
+                const balance = getBalance(node);
+
+                if (Math.abs(balance) > 1) {
+                     stepList.push(recordStep(rootRef.current, `Node ${node.value} unbalanced after deletion.`, [node.id], [node.id]));
+                }
+
+                // Balancing 
+                if (balance > 1 && getBalance(node.left) >= 0) {
+                    stepList.push(recordStep(rootRef.current, `Restoring balance: Right Rotate on ${node.value}`, [], [node.id]));
+                    const newRoot = rightRotate(node);
+                    if (node.id === rootRef.current.id) rootRef.current = newRoot;
+                    return newRoot;
+                }
+                if (balance > 1 && getBalance(node.left) < 0) {
+                    stepList.push(recordStep(rootRef.current, `Restoring balance: Left-Right Rotate`, [], [node.id]));
+                    node.left = leftRotate(node.left);
+                    const newRoot = rightRotate(node);
+                    if (node.id === rootRef.current.id) rootRef.current = newRoot;
+                    return newRoot;
+                }
+                if (balance < -1 && getBalance(node.right) <= 0) {
+                    stepList.push(recordStep(rootRef.current, `Restoring balance: Left Rotate on ${node.value}`, [], [node.id]));
+                    const newRoot = leftRotate(node);
+                    if (node.id === rootRef.current.id) rootRef.current = newRoot;
+                    return newRoot;
+                }
+                if (balance < -1 && getBalance(node.right) > 0) {
+                    stepList.push(recordStep(rootRef.current, `Restoring balance: Right-Left Rotate`, [], [node.id]));
+                    node.right = rightRotate(node.right);
+                    const newRoot = leftRotate(node);
+                    if (node.id === rootRef.current.id) rootRef.current = newRoot;
+                    return newRoot;
+                }
+
+                return node;
+            };
+
+            // -- Handlers --
+            const uniqueIdCounter = useRef(0);
+
+            const handleInsert = () => {
+                const val = parseInt(inputValue);
+                if (isNaN(val)) return;
+
+                const stepList = [];
+                const currentRootClone = cloneTree(treeRoot);
+                const rootRef = { current: currentRootClone };
+                
+                stepList.push(recordStep(currentRootClone, `Prepare to insert ${val}`));
+
+                const newRoot = insertNode(currentRootClone, val, stepList, uniqueIdCounter, rootRef);
+                
+                stepList.push(recordStep(newRoot, `Inserted ${val}. Tree is balanced.`));
+
+                setSteps(stepList);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+                // setInputValue(""); // Optional: keep value or clear
+            };
+
+            const handleDelete = () => {
+                const val = parseInt(inputValue);
+                if (isNaN(val)) return;
+                if (!treeRoot) return;
+
+                const stepList = [];
+                const currentRootClone = cloneTree(treeRoot);
+                const rootRef = { current: currentRootClone };
+                
+                stepList.push(recordStep(currentRootClone, `Prepare to delete ${val}`));
+
+                const newRoot = deleteNode(currentRootClone, val, stepList, rootRef);
+                
+                stepList.push(recordStep(newRoot, `Deletion complete.`));
+
+                setSteps(stepList);
+                setCurrentStepIndex(0);
+                setIsPlaying(true);
+                // setInputValue("");
+            };
+
+            const reset = () => {
+                setTreeRoot(null);
+                setSteps([{
+                    root: null,
+                    highlight: [],
+                    rotating: [],
+                    sortedArray: [],
+                    description: "Tree cleared."
+                }]);
+                setCurrentStepIndex(0);
+                setIsPlaying(false);
+                uniqueIdCounter.current = 0;
+            };
+
+            const generateRandom = () => {
+                reset();
+                setTimeout(() => {
+                    let root = null;
+                    const count = 7;
+                    const vals = [];
+                    uniqueIdCounter.current = 0;
+                    
+                    let rootRef = { current: null };
+                    const silentStepList = [];
+                    
+                    for(let i=0; i<count; i++) {
+                        const val = Math.floor(Math.random() * 99) + 1;
+                        if(!vals.includes(val)) {
+                            vals.push(val);
+                            rootRef.current = root;
+                            root = insertNode(root, val, silentStepList, uniqueIdCounter, rootRef);
+                        }
+                    }
+                    setTreeRoot(root);
+                    setSteps([{
+                        root: cloneTree(root),
+                        highlight: [],
+                        rotating: [],
+                        sortedArray: vals.sort((a,b)=>a-b),
+                        description: "Generated Random AVL Tree."
+                    }]);
+                }, 100);
+            };
+
+            // Initialize
+            useEffect(() => {
+                generateRandom();
+            }, []);
+
+            // -- Playback Effect --
+            useEffect(() => {
+                if (isPlaying) {
+                    timerRef.current = setInterval(() => {
+                        setCurrentStepIndex((prev) => {
+                            if (prev < steps.length - 1) {
+                                return prev + 1;
+                            } else {
+                                setIsPlaying(false);
+                                setTreeRoot(steps[steps.length - 1].root);
+                                return prev;
+                            }
+                        });
+                    }, 2000 - animationSpeed);
+                } else {
+                    clearInterval(timerRef.current);
+                }
+                return () => clearInterval(timerRef.current);
+            }, [isPlaying, steps, animationSpeed]);
+
+            // -- Rendering --
+            
+            const currentStep = steps[currentStepIndex] || { root: treeRoot, highlight: [], rotating: [], sortedArray: [], description: "Ready" };
+
+            const getNodeColor = (node) => {
+                if (!node) return COLORS.default;
+                if (currentStep.rotating.includes(node.id)) return COLORS.rotating;
+                if (currentStep.highlight.includes(node.id)) return COLORS.comparing;
+                return COLORS.default;
+            };
+
+            // Recursive Tree Render
+            const renderTreeNodes = (node, x, y, level, parentX, parentY) => {
+                if (!node) return [];
+
+                // Calculate geometry
+                const spread = 200 / Math.pow(2, level); 
+                const nextY = y + 60;
+                const leftX = x - spread;
+                const rightX = x + spread;
+
+                const elements = [];
+
+                if (parentX !== null) {
+                    elements.push(
+                        React.createElement("line", {
+                            key: `line-${node.id}`,
+                            x1: parentX, y1: parentY,
+                            x2: x, y2: y,
+                            stroke: "#475569", strokeWidth: 2,
+                            className: "tree-line"
+                        })
+                    );
+                }
+
+                elements.push(...renderTreeNodes(node.left, leftX, nextY, level + 1, x, y));
+                elements.push(...renderTreeNodes(node.right, rightX, nextY, level + 1, x, y));
+
+                const colorClass = getNodeColor(node);
+                elements.push(
+                    React.createElement("g", { key: `node-group-${node.id}` },
+                        React.createElement("circle", {
+                            cx: x, cy: y, r: 20,
+                            className: `transition-all duration-300 fill-slate-800 stroke-2 ${colorClass.replace('bg-', 'fill-').replace('border-', 'stroke-')}`
+                        }),
+                        React.createElement("text", {
+                            x: x, y: y, dy: 5,
+                            textAnchor: "middle",
+                            className: "text-sm font-bold fill-white pointer-events-none"
+                        }, node.value),
+                        React.createElement("text", {
+                            x: x + 24, y: y - 10,
+                            className: "text-[10px] fill-slate-500 font-mono"
+                        }, `h:${node.height}`)
+                    )
+                );
+
+                return elements;
+            };
+
+            return (
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
+                
+                    /* Title (Full Width) */
+                    React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
+                        React.createElement(Network, { size: 32, className: "text-indigo-400" }),
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "AVL Tree")
+                    ),
+
+                    /* Main Layout: Sidebar (Left) + Vis (Right) */
+                    React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
+                        
+                        /* Sidebar */
+                        React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
+                            
+                            /* Card 1: Actions (Now First) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-5" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                    React.createElement(Settings, { size: 14 }), "Actions"
+                                ),
+
+                                /* Info Text */
+                                React.createElement("div", { className: "flex items-start gap-2 text-slate-400 text-xs leading-relaxed bg-slate-900/50 p-3 rounded-lg border border-slate-700/50" },
+                                    React.createElement(Info, { size: 14, className: "mt-0.5 shrink-0" }),
+                                    "Insert or delete nodes to see rebalancing."
+                                ),
+
+                                /* Input Group */
+                                React.createElement("div", { className: "flex flex-col gap-3" },
+                                    React.createElement("input", { 
+                                        type: "number",
+                                        value: inputValue,
+                                        onChange: (e) => setInputValue(e.target.value),
+                                        className: "bg-slate-900 border border-slate-600 rounded-lg px-3 py-3 text-slate-200 text-center focus:outline-none focus:border-indigo-500 w-full text-lg font-mono",
+                                        placeholder: "Value"
+                                    }),
+                                    
+                                    React.createElement("div", { className: "grid grid-cols-2 gap-2" },
+                                        React.createElement("button", {
+                                            onClick: handleInsert,
+                                            disabled: isPlaying || inputValue === "",
+                                            className: "flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2.5 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50"
+                                        }, 
+                                            React.createElement(Plus, { size: 16 }), "Insert"
+                                        ),
+                                        React.createElement("button", {
+                                            onClick: handleDelete,
+                                            disabled: isPlaying || inputValue === "",
+                                            className: "flex items-center justify-center gap-2 bg-rose-600 hover:bg-rose-500 text-white px-3 py-2.5 rounded-lg font-medium text-sm transition-colors shadow-lg disabled:opacity-50"
+                                        }, 
+                                        React.createElement(Trash2, { size: 16 }), "Delete"
+                                        )
+                                    )
+                                )
+                            ),
+
+                            /* Card 2: Playback Controls (Now Second/Bottom) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                    React.createElement(Activity, { size: 14 }), "Playback Controls"
+                                ),
+                                React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                    React.createElement("button", { onClick: generateRandom, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "New Random Tree" },
+                                        React.createElement(RotateCcw, { size: 18 })
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("button", { 
+                                            onClick: () => { setIsPlaying(!isPlaying); }, 
+                                            disabled: steps.length <= 1 || currentStepIndex === steps.length -1,
+                                            className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        },
+                                            isPlaying 
+                                                ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                                : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                        ),
+                                        React.createElement("button", { 
+                                            onClick: () => {
+                                                if(currentStepIndex < steps.length - 1) {
+                                                    setCurrentStepIndex(prev => prev + 1);
+                                                    setIsPlaying(false);
+                                                }
+                                            },
+                                            disabled: currentStepIndex === steps.length - 1, 
+                                            className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" 
+                                        },
+                                            React.createElement(SkipForward, { size: 18 })
+                                        )
+                                    )
+                                ),
+
+                                /* Divider */
+                                React.createElement("div", { className: "h-px w-full bg-slate-700/50 my-1" }),
+
+                                /* Speed Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                        React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "100", max: "1900", step: "100",
+                                        value: animationSpeed,
+                                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    })
+                                )
+                            )
+                        ),
+
+                        /* Main Content: Visualization */
+                        React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4" },
+                            
+                            /* Description Box */
+                            React.createElement("div", { className: "w-full min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-lg" },
+                                React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center" }, currentStep.description)
+                            ),
+
+                            /* Main Content Box */
+                            React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-6" },
+                                
+                                /* Legend */
+                                React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 pb-4 border-b border-slate-700" },
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.comparing.split(' ')[0]}` }), "Compare / Unbalanced"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.rotating.split(' ')[0]}` }), "Rotating"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: `w-3 h-3 rounded-full ${COLORS.default.split(' ')[0]}` }), "Balanced"
+                                    )
+                                ),
+
+                                /* Sorted View (In-Order) */
+                                React.createElement("div", { className: "flex flex-col items-center w-full" },
+                                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "In-Order Traversal (Sorted)"),
+                                    React.createElement("div", { className: "flex flex-wrap justify-center gap-1 min-h-[40px]" },
+                                        currentStep.sortedArray.map((val, idx) => {
+                                            return React.createElement("div", { key: idx, className: "w-10 h-10 flex items-center justify-center rounded-md border border-slate-600 bg-slate-700/50 font-mono font-bold text-slate-300" },
+                                                val
+                                            );
+                                        })
+                                    )
+                                ),
+
+                                /* Tree Representation Area */
+                                React.createElement("div", { className: "relative w-full min-h-[450px] bg-slate-900/50 rounded-lg flex flex-col items-center justify-center overflow-hidden mt-2 border border-slate-800" },
+                                    React.createElement("h3", { className: "absolute top-4 left-4 text-xs font-bold tracking-wider text-slate-500 uppercase z-0" }, "Tree Structure"),
+                                    
+                                    /* Background Grid Pattern */
+                                    React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                                    
+                                    /* The Tree */
+                                    React.createElement("svg", { className: "w-full h-full min-h-[450px] min-w-[600px]", viewBox: "0 0 800 450", preserveAspectRatio: "xMidYMid meet" },
+                                        renderTreeNodes(currentStep.root, 400, 50, 0, null, null)
+                                    )
+                                ),
+
+                                /* Footer Progress */
+                                React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4" },
+                                    React.createElement("span", null, `STEP ${currentStepIndex} / ${steps.length > 0 ? steps.length - 1 : 0}`),
+                                    React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full mx-4 hidden sm:block" },
+                                        React.createElement("div", { 
+                                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                        style: { width: `${steps.length > 1 ? (currentStepIndex / (steps.length - 1)) * 100 : 0}%` }
+                                        })
+                                    ),
+                                    React.createElement("span", null, isPlaying ? "Animating..." : "Ready")
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(AVLTreeVisualizer));
+    </script>
+</body>
+</html>
