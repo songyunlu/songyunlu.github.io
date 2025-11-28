@@ -56,7 +56,7 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Cpu, CheckCircle2 } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Cpu, CheckCircle2, Activity, Settings } from 'lucide-react';
 
         const BrianKernighanVisualizer = () => {
             // -- State --
@@ -261,164 +261,183 @@
             return (
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
-                /* Top Bar Wrapper */
-                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-6" },
-                    
-                    /* Title (Standalone Left) */
-                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
-                        React.createElement(Cpu, { size: 32, className: "text-indigo-400" }),
-                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Brian Kernighan's Algo")
-                    ),
+                /* Title (Full Width) */
+                React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
+                    React.createElement(Cpu, { size: 32, className: "text-indigo-400" }),
+                    React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Brian Kernighan's Algo")
+                ),
 
-                    /* Controls (Pill-shaped Container Right) */
-                    React.createElement("div", { className: "flex flex-wrap items-center justify-end gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
+                /* Main Layout: Sidebar (Left) + Vis (Right) */
+                React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
+                    
+                    /* Sidebar */
+                    React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
                         
-                        /* Speed Slider */
-                        React.createElement("div", { className: "flex items-center gap-3" },
-                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
-                            React.createElement("input", {
-                                type: "range", min: "100", max: "2000", step: "100",
-                                value: animationSpeed,
-                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                            })
+                        /* Settings Card (Now First) */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                React.createElement(Settings, { size: 14 }), "Settings"
+                            ),
+                            
+                            /* Bits Slider */
+                            React.createElement("div", { className: "flex flex-col gap-2" },
+                                React.createElement("div", { className: "flex justify-between items-center" },
+                                    React.createElement("span", { className: "text-xs text-slate-400" }, "Total Bits"),
+                                    React.createElement("span", { className: "text-xs font-mono text-indigo-300 bg-indigo-900/30 px-2 py-0.5 rounded" }, numBits)
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: "4", max: "20", step: "1",
+                                    value: numBits,
+                                    onChange: (e) => setNumBits(Number(e.target.value)),
+                                    disabled: isPlaying,
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                                })
+                            )
                         ),
 
-                        /* Separator */
-                        React.createElement("div", { className: "h-8 w-px bg-slate-700 hidden sm:block mx-2" }),
+                        /* Playback Controls Card (Now Second/Bottom) */
+                        React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                            React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                React.createElement(Activity, { size: 14 }), "Playback Controls"
+                            ),
+                            
+                            /* Buttons */
+                            React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                React.createElement("button", { onClick: reset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "Reset" },
+                                    React.createElement(RotateCcw, { size: 18 })
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                        React.createElement(SkipBack, { size: 18 })
+                                    ),
+                                    React.createElement("button", { 
+                                        onClick: togglePlay, 
+                                        className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                                    },
+                                        isPlaying 
+                                            ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                            : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                    ),
+                                    React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                        React.createElement(SkipForward, { size: 18 })
+                                    )
+                                )
+                            ),
 
-                        /* Playback Buttons */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors", title: "Reset" },
-                                React.createElement(RotateCcw, { size: 18 })
-                            ),
-                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
-                                React.createElement(SkipBack, { size: 18 })
-                            ),
-                            React.createElement("button", { 
-                                onClick: togglePlay, 
-                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
-                            },
-                                isPlaying 
-                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
-                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
-                            ),
-                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
-                                React.createElement(SkipForward, { size: 18 })
+                            /* Speed Slider */
+                            React.createElement("div", { className: "flex flex-col gap-2 mt-2 pt-4 border-t border-slate-700/50" },
+                                React.createElement("div", { className: "flex justify-between items-center" },
+                                    React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                    React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                ),
+                                React.createElement("input", {
+                                    type: "range", min: "100", max: "2000", step: "100",
+                                    value: animationSpeed,
+                                    onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                    className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                })
                             )
                         )
-                    )
-                ),
-
-                /* Settings Bar (Bits) */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex items-center justify-end gap-6 shadow-sm z-10" },
-                    /* Size Slider (Bits) */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        React.createElement("span", { className: "text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Bits"),
-                        React.createElement("input", {
-                            type: "range", min: "4", max: "20", step: "1",
-                            value: numBits,
-                            onChange: (e) => setNumBits(Number(e.target.value)),
-                            disabled: isPlaying,
-                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, numBits)
-                    )
-                ),
-
-                /* Description Box */
-                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center shadow-lg" },
-                    React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
-                ),
-
-                /* Main Content */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-4" },
-                    
-                    /* Legend (Top Right) */
-                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 w-full" },
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.one}` }), "Bit Set (1)"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.zero}` }), "Bit Unset (0)"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.target}` }), "Target (Rightmost 1)"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.clearing}` }), "Clearing"
-                        )
                     ),
 
-                    /* Divider after Legend */
-                    React.createElement("div", { className: "w-full h-px bg-slate-700/50 my-1" }),
+                    /* Main Content: Visualization (Right) */
+                    React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4" },
+                        
+                        /* Description Box */
+                        React.createElement("div", { className: "w-full min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-lg" },
+                            React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                        ),
 
-                    /* Array Representation (The Bits) */
-                    React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
-                        React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Binary Representation (Array)"),
-                        React.createElement("div", { className: "flex justify-center flex-wrap w-full gap-1 sm:gap-2 px-4" },
-                            currentBits.map((val, idx) => {
-                                const isTarget = (steps[currentStepIndex]?.highlights || []).includes(idx);
-                                return React.createElement("div", { 
-                                    key: idx, 
-                                    className: `relative w-8 sm:w-12 aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 border border-slate-600
-                                    ${isTarget ? 'border-amber-400 border-2 -translate-y-1 shadow-amber-500/30 shadow-md z-10 scale-110' : 'bg-slate-800 text-slate-300'}
-                                    ${val === 1 && !isTarget ? 'text-indigo-200 bg-slate-800' : ''}
-                                    ${val === 0 && !isTarget ? 'text-slate-500 bg-slate-900/50' : ''}
-                                    `
-                                },
-                                    React.createElement("span", null, val),
-                                    React.createElement("span", { className: "text-[8px] font-normal text-slate-600 leading-none mt-1 absolute bottom-1" }, idx),
+                        /* Main Content Box */
+                        React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-4" },
+                            
+                            /* Legend (Top Right) */
+                            React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 w-full" },
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.one}` }), "Bit Set (1)"
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.zero}` }), "Bit Unset (0)"
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.target}` }), "Target (Rightmost 1)"
+                                ),
+                                React.createElement("div", { className: "flex items-center gap-2" },
+                                    React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.clearing}` }), "Clearing"
                                 )
-                            })
-                        )
-                    ),
+                            ),
 
-                    /* Bar Chart (Digital Signal Style) */
-                    React.createElement("div", { className: "relative w-full h-48 sm:h-64 bg-slate-900/50 rounded-lg p-4 flex items-end justify-center overflow-hidden mt-4 border border-slate-800" },
-                        React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
-                        
-                        /* Label for the Chart */
-                        React.createElement("div", { className: "absolute top-4 left-4 text-xs font-mono text-slate-500" }, 
-                            "VISUALIZATION: BIT VALUES"
-                        ),
+                            /* Divider after Legend */
+                            React.createElement("div", { className: "w-full h-px bg-slate-700/50 my-1" }),
 
-                        React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
-                            currentBits.map((val, idx) => {
-                                // Height is 80% for '1', 20% for '0' to look like digital signal
-                                const heightPct = val === 1 ? 80 : 20;
-                                return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group` },
-                                    /* Value tooltip on hover */
-                                    React.createElement("span", { className: "text-[10px] text-slate-400 mb-2 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
-                                    
-                                    /* The Bar */
-                                    React.createElement("div", { 
-                                        className: `w-full rounded-t-md transition-all duration-300 ease-in-out ${getBarColor(idx, val)}`,
-                                        style: { height: `${heightPct}%` }
+                            /* Array Representation (The Bits) */
+                            React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
+                                React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Binary Representation (Array)"),
+                                React.createElement("div", { className: "flex justify-center flex-wrap w-full gap-1 sm:gap-2 px-4" },
+                                    currentBits.map((val, idx) => {
+                                        const isTarget = (steps[currentStepIndex]?.highlights || []).includes(idx);
+                                        return React.createElement("div", { 
+                                            key: idx, 
+                                            className: `relative w-8 sm:w-12 aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 border border-slate-600
+                                            ${isTarget ? 'border-amber-400 border-2 -translate-y-1 shadow-amber-500/30 shadow-md z-10 scale-110' : 'bg-slate-800 text-slate-300'}
+                                            ${val === 1 && !isTarget ? 'text-indigo-200 bg-slate-800' : ''}
+                                            ${val === 0 && !isTarget ? 'text-slate-500 bg-slate-900/50' : ''}
+                                            `
+                                        },
+                                            React.createElement("span", null, val),
+                                            React.createElement("span", { className: "text-[8px] font-normal text-slate-600 leading-none mt-1 absolute bottom-1" }, idx),
+                                        )
                                     })
-                                );
-                            })
-                        )
-                    ),
+                                )
+                            ),
 
-                    /* Footer */
-                    React.createElement("div", { className: "w-full flex flex-col sm:flex-row justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 mt-2 gap-4 sm:gap-0" },
-                        React.createElement("div", { className: "flex gap-4" },
-                            React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
-                        ),
-                        
-                        /* Progress Bar */
-                        React.createElement("div", { className: "w-full sm:w-40 h-1 bg-slate-700 rounded-full mx-4" },
-                            React.createElement("div", { 
-                                className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
-                                style: { width: `${progress}%` }
-                            })
-                        ),
-                        
-                        /* Set Bit Counter */
-                        React.createElement("div", { className: "flex items-center gap-2 text-indigo-300 font-mono bg-slate-900 px-3 py-1 rounded-full border border-indigo-900/50" },
-                            isFinished ? React.createElement(CheckCircle2, { size: 14, className: "text-emerald-500" }) : null,
-                            React.createElement("span", null, `SET BITS: ${currentCount}`)
+                            /* Bar Chart (Digital Signal Style) */
+                            React.createElement("div", { className: "relative w-full h-48 sm:h-64 bg-slate-900/50 rounded-lg p-4 flex items-end justify-center overflow-hidden mt-4 border border-slate-800" },
+                                React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                                
+                                /* Label for the Chart */
+                                React.createElement("div", { className: "absolute top-4 left-4 text-xs font-mono text-slate-500" }, 
+                                    "VISUALIZATION: BIT VALUES"
+                                ),
+
+                                React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
+                                    currentBits.map((val, idx) => {
+                                        // Height is 80% for '1', 20% for '0' to look like digital signal
+                                        const heightPct = val === 1 ? 80 : 20;
+                                        return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group` },
+                                            /* Value tooltip on hover */
+                                            React.createElement("span", { className: "text-[10px] text-slate-400 mb-2 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
+                                            
+                                            /* The Bar */
+                                            React.createElement("div", { 
+                                                className: `w-full rounded-t-md transition-all duration-300 ease-in-out ${getBarColor(idx, val)}`,
+                                                style: { height: `${heightPct}%` }
+                                            })
+                                        );
+                                    })
+                                )
+                            ),
+
+                            /* Footer */
+                            React.createElement("div", { className: "w-full flex flex-col sm:flex-row justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 mt-2 gap-4 sm:gap-0" },
+                                React.createElement("div", { className: "flex gap-4" },
+                                    React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                                ),
+                                
+                                /* Progress Bar */
+                                React.createElement("div", { className: "w-full sm:w-40 h-1 bg-slate-700 rounded-full mx-4" },
+                                    React.createElement("div", { 
+                                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                        style: { width: `${progress}%` }
+                                    })
+                                ),
+                                
+                                /* Set Bit Counter */
+                                React.createElement("div", { className: "flex items-center gap-2 text-indigo-300 font-mono bg-slate-900 px-3 py-1 rounded-full border border-indigo-900/50" },
+                                    isFinished ? React.createElement(CheckCircle2, { size: 14, className: "text-emerald-500" }) : null,
+                                    React.createElement("span", null, `SET BITS: ${currentCount}`)
+                                )
+                            )
                         )
                     )
                 )

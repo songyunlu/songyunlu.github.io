@@ -55,7 +55,7 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitBranch, ZoomIn, ZoomOut, Maximize, Layers, ArrowRight, Hash } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitBranch, ZoomIn, ZoomOut, Maximize, Layers, ArrowRight, ArrowLeftRight, Hash, Activity, Settings } from 'lucide-react';
 
         const DFSVisualizer = () => {
             // -- State --
@@ -516,347 +516,371 @@
             return (
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
                 
-                /* Top Control Bar */
-                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
-                    
-                    /* Title */
-                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
-                        React.createElement(GitBranch, { size: 38, className: "text-violet-400" }),
-                        React.createElement("div", { className: "flex flex-col" },
-                            React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-violet-400 whitespace-nowrap leading-none tracking-tight" }, "Depth-First Search"),
-                            React.createElement("span", { className: "text-sm text-slate-400 font-medium" }, "Recursive Graph Traversal")
-                        )
+                    /* Title (Full Width) */
+                    React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
+                        React.createElement(GitBranch, { size: 32, className: "text-violet-400" }),
+                        React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-violet-400 whitespace-nowrap tracking-tight" }, "Depth-First Search")
                     ),
 
-                    /* Controls */
-                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-end gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
+                    /* Main Layout: Sidebar (Left) + Content (Right) */
+                    React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
                         
-                        /* Speed Slider */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
-                            React.createElement("input", {
-                                type: "range", min: "100", max: "1900", step: "100",
-                                value: animationSpeed,
-                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                            })
-                        ),
-
-                        React.createElement("div", { className: "h-6 w-px bg-slate-700 hidden sm:block" }),
-                        React.createElement("div", { className: "flex items-center gap-3" },
-                            React.createElement("button", { onClick: reset, className: "text-slate-400 hover:text-white transition-all", title: "Reset" },
-                                React.createElement(RotateCcw, { size: 18 })
-                            ),
-                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "text-slate-400 hover:text-white disabled:opacity-30 transition-all" },
-                                React.createElement(SkipBack, { size: 18 })
-                            ),
-                            React.createElement("button", { 
-                                onClick: togglePlay, 
-                                className: "p-2 bg-violet-600 hover:bg-violet-500 text-white rounded-full shadow-lg shadow-violet-900/50 transition-all hover:scale-105 active:scale-95"
-                            },
-                                isPlaying 
-                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
-                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
-                            ),
-                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "text-slate-400 hover:text-white disabled:opacity-30 transition-all" },
-                                React.createElement(SkipForward, { size: 18 })
-                            )
-                        )
-                    )
-                ),
-
-                /* Settings Bar (Nodes, Density, Buttons) */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex flex-wrap items-center justify-end gap-4 sm:gap-8 shadow-sm z-10" },
-                    
-                    /* Nodes Slider */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        React.createElement("span", { className: "text-xs text-slate-400 font-bold uppercase tracking-wider" }, "Nodes"),
-                        React.createElement("input", {
-                            type: "range", min: "5", max: "20", step: "1",
-                            value: nodeCount,
-                            onChange: (e) => setNodeCount(Number(e.target.value)),
-                            disabled: isPlaying,
-                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-sm text-slate-200 font-mono font-medium min-w-[1.5rem] text-center" }, nodeCount)
-                    ),
-                    
-                    /* Density Slider */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        React.createElement("span", { className: "text-xs text-slate-400 font-bold uppercase tracking-wider" }, "Density"),
-                        React.createElement("input", {
-                            type: "range", min: "0", max: "2", step: "0.1",
-                            value: density,
-                            onChange: (e) => setDensity(Number(e.target.value)),
-                            disabled: isPlaying,
-                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-sm text-slate-200 font-mono font-medium min-w-[1.5rem] text-center" }, density.toFixed(1))
-                    ),
-
-                    /* Divider */
-                    React.createElement("div", { className: "h-8 w-px bg-slate-700 mx-2 hidden sm:block" }),
-
-                    /* Buttons Group */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        /* Weighted Button */
-                        React.createElement("button", {
-                            onClick: () => setIsWeighted(!isWeighted),
-                            className: `flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
-                                isWeighted 
-                                ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/50" 
-                                : "bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-                            }`
-                        }, 
-                            React.createElement(Hash, { size: 14 }),
-                            "Weighted"
-                        ),
-                        /* Directed Button */
-                         React.createElement("button", {
-                            onClick: () => setIsDirected(!isDirected),
-                            className: `flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
-                                isDirected 
-                                ? "bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/50" 
-                                : "bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
-                            }`
-                        }, 
-                            React.createElement(ArrowRight, { size: 14 }),
-                            "Directed"
-                        )
-                    )
-                ),
-
-                /* Description - Reduced Margin (mb-4) */
-                React.createElement("div", { className: "w-full max-w-5xl min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center text-center shadow-sm" },
-                    React.createElement("p", { className: "text-md text-violet-100 font-medium animate-fade-in" }, currentStep.description)
-                ),
-
-                /* Main Content */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 sm:p-6 flex flex-col gap-6" },
-                    
-                    /* Toolbar: Legend Only (Right Aligned) */
-                    React.createElement("div", { className: "flex w-full justify-center sm:justify-end border-b border-slate-700 pb-4" },
-                        
-                        /* Legend */
-                        React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300" },
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.stackTop } }), " Current (Stack Top)"
-                            ),
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.onStack } }), " In Stack (Recursion)"
-                            ),
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.visited } }), " Visited & Popped"
-                            ),
-                            React.createElement("div", { className: "flex items-center gap-2" },
-                                React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.backtracking } }), " Backtracking"
-                            )
-                        )
-                    ),
-
-                    /* Canvas */
-                    React.createElement("div", { 
-                        className: `relative w-full h-[500px] sm:h-[600px] bg-slate-900 rounded-lg border border-slate-700 overflow-hidden shadow-inner ${isPanning ? 'cursor-grabbing' : 'grab-cursor'}`,
-                        onMouseDown: handleCanvasMouseDown,
-                        onMouseMove: handleMouseMove,
-                        onMouseUp: handleMouseUp,
-                        onMouseLeave: handleMouseUp
-                    },
-                        /* Grid */
-                        React.createElement("div", { 
-                            className: "absolute inset-0 pointer-events-none opacity-20", 
-                            style: { 
-                                backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)', 
-                                backgroundSize: '20px 20px',
-                                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                                transformOrigin: 'center'
-                            } 
-                        }),
-
-                        /* SVG */
-                        React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full" },
-                            /* Definitions for Markers (Arrowheads) */
-                            React.createElement("defs", null,
-                                React.createElement("marker", {
-                                    id: "arrowhead",
-                                    markerWidth: "10", markerHeight: "7",
-                                    refX: "28", refY: "3.5",
-                                    orient: "auto"
-                                },
-                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeDefault })
+                        /* Sidebar */
+                        React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
+                            
+                            /* Settings Card (MOVED TO TOP) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                    React.createElement(Settings, { size: 14 }), "Settings"
                                 ),
-                                React.createElement("marker", {
-                                    id: "arrowhead-traverse",
-                                    markerWidth: "10", markerHeight: "7",
-                                    refX: "28", refY: "3.5",
-                                    orient: "auto"
-                                },
-                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeTraverse })
+                                
+                                /* Nodes Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Nodes"),
+                                        React.createElement("span", { className: "text-xs font-mono text-violet-300 bg-violet-900/30 px-2 py-0.5 rounded" }, nodeCount)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "5", max: "20", step: "1",
+                                        value: nodeCount,
+                                        onChange: (e) => setNodeCount(Number(e.target.value)),
+                                        disabled: isPlaying,
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-violet-500 disabled:opacity-50"
+                                    })
                                 ),
-                                React.createElement("marker", {
-                                    id: "arrowhead-backtrack",
-                                    markerWidth: "10", markerHeight: "7",
-                                    refX: "28", refY: "3.5",
-                                    orient: "auto"
-                                },
-                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeBacktrack })
+
+                                /* Density Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Density"),
+                                        React.createElement("span", { className: "text-xs font-mono text-violet-300 bg-violet-900/30 px-2 py-0.5 rounded" }, density.toFixed(1))
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "0", max: "2", step: "0.1",
+                                        value: density,
+                                        onChange: (e) => setDensity(Number(e.target.value)),
+                                        disabled: isPlaying,
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-violet-500 disabled:opacity-50"
+                                    })
+                                ),
+
+                                /* Divider */
+                                React.createElement("div", { className: "h-px w-full bg-slate-700/50" }),
+
+                                /* Toggles */
+                                React.createElement("div", { className: "flex flex-col gap-3" },
+                                    React.createElement("button", {
+                                        onClick: () => setIsWeighted(!isWeighted),
+                                        className: `w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
+                                            isWeighted 
+                                            ? "bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/30" 
+                                            : "bg-slate-700/30 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                                        }`
+                                    }, 
+                                        React.createElement("span", { className: "flex items-center gap-2" }, 
+                                            React.createElement(Hash, { size: 14 }), 
+                                            isWeighted ? "Weighted" : "Unweighted"
+                                        ),
+                                        React.createElement("div", { className: `w-2 h-2 rounded-full ${isWeighted ? 'bg-white' : 'bg-slate-500'}` })
+                                    ),
+
+                                    React.createElement("button", {
+                                        onClick: () => setIsDirected(!isDirected),
+                                        className: `w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all border ${
+                                            isDirected 
+                                            ? "bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-900/30" 
+                                            : "bg-slate-700/30 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                                        }`
+                                    }, 
+                                        React.createElement("span", { className: "flex items-center gap-2" }, 
+                                            React.createElement(isDirected ? ArrowRight : ArrowLeftRight, { size: 14 }), 
+                                            isDirected ? "Directed" : "Undirected"
+                                        ),
+                                        React.createElement("div", { className: `w-2 h-2 rounded-full ${isDirected ? 'bg-white' : 'bg-slate-500'}` })
+                                    )
                                 )
                             ),
 
-                            React.createElement("g", { 
-                                style: { 
-                                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                                    transformOrigin: 'center',
-                                    transition: (isPanning || draggingNode !== null) ? 'none' : 'transform 0.1s ease-out'
-                                }
-                            },
-                                /* Edges */
-                                graph.edges.map((edge, idx) => {
-                                    const s = graph.nodes.find(n => n.id === edge.source);
-                                    const t = graph.nodes.find(n => n.id === edge.target);
-                                    if (!s || !t) return null;
-                                    const color = getEdgeColor(edge.source, edge.target);
-                                    const width = getEdgeWidth(edge.source, edge.target);
-                                    
-                                    // Determine Marker URL
-                                    let markerUrl = isDirected ? "url(#arrowhead)" : undefined;
-                                    if (isDirected) {
-                                        if (color === COLORS.edgeTraverse) markerUrl = "url(#arrowhead-traverse)";
-                                        if (color === COLORS.edgeBacktrack) markerUrl = "url(#arrowhead-backtrack)";
-                                    }
-
-                                    return React.createElement("g", { key: `edge-${idx}`, className: "pointer-events-none" }, 
-                                        React.createElement("line", {
-                                            x1: s.x, y1: s.y, x2: t.x, y2: t.y,
-                                            stroke: color, strokeWidth: width,
-                                            strokeLinecap: "round",
-                                            markerEnd: markerUrl,
-                                            className: "line-transition"
-                                        }),
-                                        /* Weight Label */
-                                        (isWeighted && edge.weight) && React.createElement("g", null, 
-                                            React.createElement("circle", {
-                                                cx: (s.x + t.x) / 2, cy: (s.y + t.y) / 2,
-                                                r: 9, fill: "#1e293b", stroke: color, strokeWidth: 1
-                                            }),
-                                            React.createElement("text", {
-                                                x: (s.x + t.x) / 2, y: (s.y + t.y) / 2,
-                                                dy: 3, textAnchor: "middle", fill: "#94a3b8", fontSize: 10, fontWeight: "bold"
-                                            }, edge.weight)
+                            /* Playback Controls Card (MOVED TO BOTTOM) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                    React.createElement(Activity, { size: 14 }), "Playback Controls"
+                                ),
+                                React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                    React.createElement("button", { onClick: reset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "Reset" },
+                                        React.createElement(RotateCcw, { size: 18 })
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                            React.createElement(SkipBack, { size: 18 })
+                                        ),
+                                        React.createElement("button", { 
+                                            onClick: togglePlay, 
+                                            className: "p-3 bg-violet-600 hover:bg-violet-500 text-white rounded-xl shadow-lg shadow-violet-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                                        },
+                                            isPlaying 
+                                                ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                                : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                        ),
+                                        React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                            React.createElement(SkipForward, { size: 18 })
                                         )
-                                    );
-                                }),
+                                    )
+                                ),
 
-                                /* Nodes */
-                                graph.nodes.map((node) => {
-                                    const isDraggingThis = draggingNode === node.id;
-                                    
-                                    // Determine text label logic for stack index
-                                    const stackIndex = currentStep.stack.indexOf(node.id);
-                                    const showStackIndex = stackIndex !== -1;
+                                /* Divider */
+                                React.createElement("div", { className: "h-px w-full bg-slate-700/50 my-1" }),
 
-                                    return React.createElement("g", { 
-                                        key: `node-${node.id}`, 
-                                        className: `node-transition node-interactive ${isDraggingThis ? 'cursor-grabbing' : 'cursor-grab'}`,
-                                        onMouseDown: (e) => handleNodeMouseDown(e, node.id)
-                                    },
-                                        /* Circle */
-                                        React.createElement("circle", {
-                                            cx: node.x, cy: node.y, r: 32,
-                                            fill: getNodeColor(node.id),
-                                            stroke: isDraggingThis ? '#8b5cf6' : "#0f172a", 
-                                            strokeWidth: isDraggingThis ? 5 : 4,
-                                            className: "node-transition"
-                                        }),
-                                        /* Label */
-                                        React.createElement("text", {
-                                            x: node.x, y: node.y, dy: 5,
-                                            textAnchor: "middle", fill: "#fff",
-                                            fontWeight: "bold", fontSize: 18,
-                                            className: "pointer-events-none"
-                                        }, node.label),
-                                        /* Stack Index Indicator */
-                                        showStackIndex && React.createElement("text", {
-                                            x: node.x, y: node.y, dy: -40,
-                                            textAnchor: "middle", fill: "#a78bfa",
-                                            fontSize: 12, fontWeight: "bold",
-                                            className: "pointer-events-none"
-                                        }, `S:${stackIndex}`)
-                                    );
-                                })
+                                /* Speed Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                        React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "100", max: "1900", step: "100",
+                                        value: animationSpeed,
+                                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    })
+                                )
                             )
                         ),
-                        
-                        /* Controls Overlay */
-                        React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-2 rounded-lg shadow-xl border border-slate-700" },
-                            React.createElement("button", { 
-                                onClick: handleZoomIn,
-                                className: "p-2 hover:bg-slate-700 text-slate-300 rounded transition-colors",
-                                title: "Zoom In"
-                            }, React.createElement(ZoomIn, { size: 20 })),
-                            React.createElement("button", { 
-                                onClick: handleZoomOut,
-                                className: "p-2 hover:bg-slate-700 text-slate-300 rounded transition-colors",
-                                title: "Zoom Out"
-                            }, React.createElement(ZoomOut, { size: 20 })),
-                            React.createElement("div", { className: "h-px bg-slate-700 w-full my-1" }),
-                            React.createElement("button", { 
-                                onClick: handleFitView,
-                                className: "p-2 hover:bg-slate-700 text-violet-400 rounded transition-colors",
-                                title: "Fit to Screen"
-                            }, React.createElement(Maximize, { size: 20 }))
-                        )
-                    ),
 
-                    /* Bottom Panel: Stack Visualization */
-                    React.createElement("div", { className: "flex flex-col gap-2" },
-                        React.createElement("div", { className: "flex items-center justify-between" },
-                            React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 flex items-center gap-2" }, 
-                                React.createElement(Layers, { size: 14 }), "Recursion Stack (LIFO)"
+                        /* Main Content: Visualization */
+                        React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4" },
+                            
+                            /* Description */
+                            React.createElement("div", { className: "w-full min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-lg" },
+                                React.createElement("p", { className: "text-lg text-violet-100 font-medium leading-relaxed text-center animate-fade-in" }, currentStep.description)
                             ),
-                            React.createElement("span", { className: "text-xs text-slate-500" }, "Right = Top of Stack")
-                        ),
-                        
-                        React.createElement("div", { className: "w-full min-h-[80px] bg-slate-900/50 rounded-lg border border-slate-700 p-2 flex items-center gap-2 overflow-x-auto" },
-                            currentStep.stack.length === 0 
-                                ? React.createElement("div", { className: "w-full text-center text-slate-600 italic text-sm" }, "Stack is empty")
-                                : currentStep.stack.map((nodeId, idx) => {
-                                    const isTop = idx === currentStep.stack.length - 1;
-                                    const node = graph.nodes.find(n => n.id === nodeId);
-                                    if(!node) return null;
 
-                                    return React.createElement("div", { key: idx, className: "flex items-center animate-fade-in" },
-                                        /* Arrow */
-                                        idx > 0 && React.createElement(ArrowRight, { size: 16, className: "text-slate-600 mx-1" }),
-                                        
-                                        /* Stack Item */
-                                        React.createElement("div", { className: `flex flex-col items-center justify-center w-12 h-12 rounded-lg border transition-all duration-300 ${
-                                            isTop 
-                                                ? 'bg-violet-900/50 border-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.3)] scale-110' 
-                                                : 'bg-slate-800 border-slate-600 opacity-60'
-                                        }` },
-                                            React.createElement("span", { className: `font-bold ${isTop ? 'text-white' : 'text-slate-400'}` }, node.label),
-                                            React.createElement("span", { className: "text-[10px] text-slate-500" }, idx)
+                            /* Canvas Card */
+                            React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 sm:p-6 flex flex-col gap-6" },
+                                
+                                /* Header: Legend */
+                                React.createElement("div", { className: "flex w-full justify-center sm:justify-end border-b border-slate-700 pb-4" },
+                                    React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300" },
+                                        React.createElement("div", { className: "flex items-center gap-2" },
+                                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.stackTop } }), " Current (Stack Top)"
+                                        ),
+                                        React.createElement("div", { className: "flex items-center gap-2" },
+                                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.onStack } }), " In Stack (Recursion)"
+                                        ),
+                                        React.createElement("div", { className: "flex items-center gap-2" },
+                                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.visited } }), " Visited & Popped"
+                                        ),
+                                        React.createElement("div", { className: "flex items-center gap-2" },
+                                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.backtracking } }), " Backtracking"
                                         )
-                                    );
-                                })
-                        )
-                    ),
-                    
-                    /* Progress Bar */
-                    React.createElement("div", { className: "w-full flex justify-between items-center text-xs text-slate-500 border-t border-slate-700 pt-4 mt-2" },
-                        React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
-                        React.createElement("div", { className: "hidden sm:block w-1/3 h-1 bg-slate-700 rounded-full mx-4" },
-                            React.createElement("div", { 
-                                className: "h-full bg-violet-500 rounded-full transition-all duration-100",
-                                style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
-                            })
-                        ),
-                        React.createElement("span", { className: isFinished ? "text-emerald-500" : "" }, 
-                            isFinished ? "Traversal Complete" : "Traversing..."
+                                    )
+                                ),
+
+                                /* Canvas */
+                                React.createElement("div", { 
+                                    className: `relative w-full h-[500px] sm:h-[600px] bg-slate-900 rounded-lg border border-slate-700 overflow-hidden shadow-inner ${isPanning ? 'cursor-grabbing' : 'grab-cursor'}`,
+                                    onMouseDown: handleCanvasMouseDown,
+                                    onMouseMove: handleMouseMove,
+                                    onMouseUp: handleMouseUp,
+                                    onMouseLeave: handleMouseUp
+                                },
+                                    /* Grid */
+                                    React.createElement("div", { 
+                                        className: "absolute inset-0 pointer-events-none opacity-20", 
+                                        style: { 
+                                            backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)', 
+                                            backgroundSize: '20px 20px',
+                                            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                                            transformOrigin: 'center'
+                                        } 
+                                    }),
+
+                                    /* SVG */
+                                    React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full" },
+                                        /* Definitions for Markers (Arrowheads) */
+                                        React.createElement("defs", null,
+                                            React.createElement("marker", {
+                                                id: "arrowhead",
+                                                markerWidth: "10", markerHeight: "7",
+                                                refX: "28", refY: "3.5",
+                                                orient: "auto"
+                                            },
+                                                React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeDefault })
+                                            ),
+                                            React.createElement("marker", {
+                                                id: "arrowhead-traverse",
+                                                markerWidth: "10", markerHeight: "7",
+                                                refX: "28", refY: "3.5",
+                                                orient: "auto"
+                                            },
+                                                React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeTraverse })
+                                            ),
+                                            React.createElement("marker", {
+                                                id: "arrowhead-backtrack",
+                                                markerWidth: "10", markerHeight: "7",
+                                                refX: "28", refY: "3.5",
+                                                orient: "auto"
+                                            },
+                                                React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeBacktrack })
+                                            )
+                                        ),
+
+                                        React.createElement("g", { 
+                                            style: { 
+                                                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                                                transformOrigin: 'center',
+                                                transition: (isPanning || draggingNode !== null) ? 'none' : 'transform 0.1s ease-out'
+                                            }
+                                        },
+                                            /* Edges */
+                                            graph.edges.map((edge, idx) => {
+                                                const s = graph.nodes.find(n => n.id === edge.source);
+                                                const t = graph.nodes.find(n => n.id === edge.target);
+                                                if (!s || !t) return null;
+                                                const color = getEdgeColor(edge.source, edge.target);
+                                                const width = getEdgeWidth(edge.source, edge.target);
+                                                
+                                                // Determine Marker URL
+                                                let markerUrl = isDirected ? "url(#arrowhead)" : undefined;
+                                                if (isDirected) {
+                                                    if (color === COLORS.edgeTraverse) markerUrl = "url(#arrowhead-traverse)";
+                                                    if (color === COLORS.edgeBacktrack) markerUrl = "url(#arrowhead-backtrack)";
+                                                }
+
+                                                return React.createElement("g", { key: `edge-${idx}`, className: "pointer-events-none" }, 
+                                                    React.createElement("line", {
+                                                        x1: s.x, y1: s.y, x2: t.x, y2: t.y,
+                                                        stroke: color, strokeWidth: width,
+                                                        strokeLinecap: "round",
+                                                        markerEnd: markerUrl,
+                                                        className: "line-transition"
+                                                    }),
+                                                    /* Weight Label */
+                                                    (isWeighted && edge.weight) && React.createElement("g", null, 
+                                                        React.createElement("circle", {
+                                                            cx: (s.x + t.x) / 2, cy: (s.y + t.y) / 2,
+                                                            r: 9, fill: "#1e293b", stroke: color, strokeWidth: 1
+                                                        }),
+                                                        React.createElement("text", {
+                                                            x: (s.x + t.x) / 2, y: (s.y + t.y) / 2,
+                                                            dy: 3, textAnchor: "middle", fill: "#94a3b8", fontSize: 10, fontWeight: "bold"
+                                                        }, edge.weight)
+                                                    )
+                                                );
+                                            }),
+
+                                            /* Nodes */
+                                            graph.nodes.map((node) => {
+                                                const isDraggingThis = draggingNode === node.id;
+                                                
+                                                // Determine text label logic for stack index
+                                                const stackIndex = currentStep.stack.indexOf(node.id);
+                                                const showStackIndex = stackIndex !== -1;
+
+                                                return React.createElement("g", { 
+                                                    key: `node-${node.id}`, 
+                                                    className: `node-transition node-interactive ${isDraggingThis ? 'cursor-grabbing' : 'cursor-grab'}`,
+                                                    onMouseDown: (e) => handleNodeMouseDown(e, node.id)
+                                                },
+                                                    /* Circle */
+                                                    React.createElement("circle", {
+                                                        cx: node.x, cy: node.y, r: 32,
+                                                        fill: getNodeColor(node.id),
+                                                        stroke: isDraggingThis ? '#8b5cf6' : "#0f172a", 
+                                                        strokeWidth: isDraggingThis ? 5 : 4,
+                                                        className: "node-transition"
+                                                    }),
+                                                    /* Label */
+                                                    React.createElement("text", {
+                                                        x: node.x, y: node.y, dy: 5,
+                                                        textAnchor: "middle", fill: "#fff",
+                                                        fontWeight: "bold", fontSize: 18,
+                                                        className: "pointer-events-none"
+                                                    }, node.label),
+                                                    /* Stack Index Indicator */
+                                                    showStackIndex && React.createElement("text", {
+                                                        x: node.x, y: node.y, dy: -40,
+                                                        textAnchor: "middle", fill: "#a78bfa",
+                                                        fontSize: 12, fontWeight: "bold",
+                                                        className: "pointer-events-none"
+                                                    }, `S:${stackIndex}`)
+                                                );
+                                            })
+                                        )
+                                    ),
+                                    
+                                    /* Controls Overlay */
+                                    React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-2 rounded-lg shadow-xl border border-slate-700" },
+                                        React.createElement("button", { 
+                                            onClick: handleZoomIn,
+                                            className: "p-2 hover:bg-slate-700 text-slate-300 rounded transition-colors",
+                                            title: "Zoom In"
+                                        }, React.createElement(ZoomIn, { size: 20 })),
+                                        React.createElement("button", { 
+                                            onClick: handleZoomOut,
+                                            className: "p-2 hover:bg-slate-700 text-slate-300 rounded transition-colors",
+                                            title: "Zoom Out"
+                                        }, React.createElement(ZoomOut, { size: 20 })),
+                                        React.createElement("div", { className: "h-px bg-slate-700 w-full my-1" }),
+                                        React.createElement("button", { 
+                                            onClick: handleFitView,
+                                            className: "p-2 hover:bg-slate-700 text-violet-400 rounded transition-colors",
+                                            title: "Fit to Screen"
+                                        }, React.createElement(Maximize, { size: 20 }))
+                                    )
+                                ),
+
+                                /* Bottom Panel: Stack Visualization */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex items-center justify-between" },
+                                        React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1 flex items-center gap-2" }, 
+                                            React.createElement(Layers, { size: 14 }), "Recursion Stack (LIFO)"
+                                        ),
+                                        React.createElement("span", { className: "text-xs text-slate-500" }, "Right = Top of Stack")
+                                    ),
+                                    
+                                    React.createElement("div", { className: "w-full min-h-[80px] bg-slate-900/50 rounded-lg border border-slate-700 p-2 flex items-center gap-2 overflow-x-auto" },
+                                        currentStep.stack.length === 0 
+                                            ? React.createElement("div", { className: "w-full text-center text-slate-600 italic text-sm" }, "Stack is empty")
+                                            : currentStep.stack.map((nodeId, idx) => {
+                                                const isTop = idx === currentStep.stack.length - 1;
+                                                const node = graph.nodes.find(n => n.id === nodeId);
+                                                if(!node) return null;
+
+                                                return React.createElement("div", { key: idx, className: "flex items-center animate-fade-in" },
+                                                    /* Arrow */
+                                                    idx > 0 && React.createElement(ArrowRight, { size: 16, className: "text-slate-600 mx-1" }),
+                                                    
+                                                    /* Stack Item */
+                                                    React.createElement("div", { className: `flex flex-col items-center justify-center w-12 h-12 rounded-lg border transition-all duration-300 ${
+                                                        isTop 
+                                                            ? 'bg-violet-900/50 border-violet-500 shadow-[0_0_10px_rgba(139,92,246,0.3)] scale-110' 
+                                                            : 'bg-slate-800 border-slate-600 opacity-60'
+                                                    }` },
+                                                        React.createElement("span", { className: `font-bold ${isTop ? 'text-white' : 'text-slate-400'}` }, node.label),
+                                                        React.createElement("span", { className: "text-[10px] text-slate-500" }, idx)
+                                                    )
+                                                );
+                                            })
+                                    )
+                                ),
+                                
+                                /* Progress Bar */
+                                React.createElement("div", { className: "w-full flex justify-between items-center text-xs text-slate-500 border-t border-slate-700 pt-4 mt-2" },
+                                    React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                                    React.createElement("div", { className: "hidden sm:block w-1/3 h-1 bg-slate-700 rounded-full mx-4" },
+                                        React.createElement("div", { 
+                                            className: "h-full bg-violet-500 rounded-full transition-all duration-100",
+                                            style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
+                                        })
+                                    ),
+                                    React.createElement("span", { className: isFinished ? "text-emerald-500" : "" }, 
+                                        isFinished ? "Traversal Complete" : "Traversing..."
+                                    )
+                                )
+                            )
                         )
                     )
-                )
                 )
             );
         };

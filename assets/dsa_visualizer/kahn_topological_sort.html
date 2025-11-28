@@ -55,7 +55,7 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitMerge, CheckCircle2, ZoomIn, ZoomOut, Maximize, ArrowRight } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitMerge, CheckCircle2, ZoomIn, ZoomOut, Maximize, ArrowRight, Settings, Activity } from 'lucide-react';
 
         const KahnsVisualizer = () => {
             // -- State --
@@ -454,293 +454,315 @@
             };
 
             return (
-                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
+                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
-                /* Top Control Bar */
-                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
-                    
-                    /* 1. Title & Icon */
-                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                    /* Title (Full Width) */
+                    React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
                         React.createElement(GitMerge, { size: 38, className: "text-blue-400 transform rotate-90" }),
                         React.createElement("div", { className: "flex flex-col" },
-                            React.createElement("h1", { className: "text-xl sm:text-2xl font-bold text-blue-400 whitespace-nowrap leading-none tracking-tight" }, "Topological Sort"),
+                            React.createElement("h1", { className: "text-xl sm:text-3xl font-bold text-blue-400 whitespace-nowrap leading-none tracking-tight" }, "Topological Sort"),
                             React.createElement("span", { className: "text-sm text-slate-400 font-medium" }, "Kahn's Algorithm")
                         )
                     ),
 
-                    /* 2. Controls Pill (Speed & Playback Only) */
-                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-end gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
+                    /* Main Layout: Vis (Right) + Sidebar (Left) */
+                    React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
                         
-                        /* Speed Slider */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
-                            React.createElement("input", {
-                                type: "range", min: "100", max: "1900", step: "100",
-                                value: animationSpeed,
-                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                            })
-                        ),
-
-                        /* Vertical Separator */
-                        React.createElement("div", { className: "h-6 w-px bg-slate-700 hidden sm:block" }),
-
-                        /* Playback Buttons */
-                        React.createElement("div", { className: "flex items-center gap-3" },
-                            React.createElement("button", { onClick: reset, className: "text-slate-400 hover:text-white transition-all", title: "Reset" },
-                                React.createElement(RotateCcw, { size: 18 })
-                            ),
-                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "text-slate-400 hover:text-white disabled:opacity-30 transition-all" },
-                                React.createElement(SkipBack, { size: 18 })
-                            ),
-                            React.createElement("button", { 
-                                onClick: togglePlay, 
-                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95"
-                            },
-                                isPlaying 
-                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
-                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
-                            ),
-                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "text-slate-400 hover:text-white disabled:opacity-30 transition-all" },
-                                React.createElement(SkipForward, { size: 18 })
-                            )
-                        )
-                    )
-                ),
-
-                /* Settings Bar (Size & Density) - New Block */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex flex-wrap items-center justify-end gap-6 shadow-sm" },
-                    /* Nodes Slider */
-                    React.createElement("div", { className: "flex items-center gap-2" },
-                        React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Size"),
-                        React.createElement("input", {
-                            type: "range", min: "3", max: "10", step: "1",
-                            value: nodeCount,
-                            onChange: (e) => setNodeCount(Number(e.target.value)),
-                            disabled: isPlaying,
-                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, nodeCount)
-                    ),
-
-                    /* Density Slider */
-                    React.createElement("div", { className: "flex items-center gap-2" },
-                        React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Edge %"),
-                        React.createElement("input", {
-                            type: "range", min: "0.5", max: "2.5", step: "0.5",
-                            value: edgeDensity,
-                            onChange: (e) => setEdgeDensity(Number(e.target.value)),
-                            disabled: isPlaying,
-                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-xs text-slate-300 font-mono w-4" }, edgeDensity)
-                    )
-                ),
-
-                /* Instruction Block */
-                React.createElement("div", { className: "w-full max-w-5xl min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center text-center shadow-sm" },
-                    React.createElement("p", { className: "text-md text-blue-100 font-medium animate-fade-in" }, currentStep.description)
-                ),
-
-                /* Main Content Area */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 sm:p-6 flex flex-col gap-6" },
-                    
-                    /* Legend */
-                    React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300 border-b border-slate-700 pb-4" },
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.zeroDegree } }), " In Queue (0 In-Degree)"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.processing } }), " Processing"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.neighbor } }), " Neighbor Update"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.sorted } }), " Sorted"
-                        )
-                    ),
-
-                    /* Visualization Canvas */
-                    React.createElement("div", { 
-                        className: `relative w-full h-[400px] sm:h-[500px] bg-slate-900 rounded-lg border border-slate-700 overflow-hidden shadow-inner ${isPanning ? 'cursor-grabbing' : 'grab-cursor'}`,
-                        onMouseDown: handleCanvasMouseDown,
-                        onMouseMove: handleMouseMove,
-                        onMouseUp: handleMouseUp,
-                        onMouseLeave: handleMouseUp
-                    },
-                        /* Dots Grid */
-                        React.createElement("div", { 
-                            className: "absolute inset-0 pointer-events-none opacity-20", 
-                            style: { 
-                                backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)', 
-                                backgroundSize: '20px 20px',
-                                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                                transformOrigin: 'center'
-                            } 
-                        }),
-
-                        /* SVG Content */
-                        React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full" },
-                            React.createElement("defs", null,
-                                React.createElement("marker", {
-                                    id: "arrowhead", markerWidth: "10", markerHeight: "7",
-                                    refX: "28", refY: "3.5", orient: "auto"
-                                },
-                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: "#334155" })
+                        /* Sidebar (Left) */
+                        React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
+                            
+                            /* Settings Card (Now First) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                    React.createElement(Settings, { size: 14 }), "Settings"
                                 ),
-                                React.createElement("marker", {
-                                    id: "arrowhead-active", markerWidth: "10", markerHeight: "7",
-                                    refX: "28", refY: "3.5", orient: "auto"
-                                },
-                                    React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeActive })
+                                
+                                /* Size Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Graph Size"),
+                                        React.createElement("span", { className: "text-xs font-mono text-indigo-300 bg-indigo-900/30 px-2 py-0.5 rounded" }, nodeCount)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "3", max: "10", step: "1",
+                                        value: nodeCount,
+                                        onChange: (e) => setNodeCount(Number(e.target.value)),
+                                        disabled: isPlaying,
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-blue-500 disabled:opacity-50"
+                                    })
+                                ),
+
+                                /* Density Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Edge Density"),
+                                        React.createElement("span", { className: "text-xs font-mono text-purple-300 bg-purple-900/30 px-2 py-0.5 rounded" }, edgeDensity)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "0.5", max: "2.5", step: "0.5",
+                                        value: edgeDensity,
+                                        onChange: (e) => setEdgeDensity(Number(e.target.value)),
+                                        disabled: isPlaying,
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
+                                    })
                                 )
                             ),
+
+                            /* Playback Controls Card (Now Second/Bottom) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                    React.createElement(Activity, { size: 14 }), "Playback Controls"
+                                ),
+                                React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                    React.createElement("button", { onClick: reset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "Reset" },
+                                        React.createElement(RotateCcw, { size: 18 })
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                            React.createElement(SkipBack, { size: 18 })
+                                        ),
+                                        React.createElement("button", { 
+                                            onClick: togglePlay, 
+                                            className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                                        },
+                                            isPlaying 
+                                                ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                                : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                        ),
+                                        React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                            React.createElement(SkipForward, { size: 18 })
+                                        )
+                                    )
+                                ),
+
+                                /* Divider */
+                                React.createElement("div", { className: "h-px w-full bg-slate-700/50" }),
+
+                                /* Speed Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                        React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "100", max: "1900", step: "100",
+                                        value: animationSpeed,
+                                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    })
+                                )
+                            )
+                        ),
+
+                        /* Main Content (Right) */
+                        React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4" },
                             
-                            React.createElement("g", { 
-                                style: { 
-                                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                                    transformOrigin: 'center',
-                                    transition: (isPanning || draggingNode !== null) ? 'none' : 'transform 0.1s ease-out'
-                                }
-                            },
-                                /* Edges */
-                                graph.edges.map((edge, idx) => {
-                                    const s = graph.nodes.find(n => n.id === edge.source);
-                                    const t = graph.nodes.find(n => n.id === edge.target);
-                                    if (!s || !t) return null;
-                                    const color = getEdgeColor(edge.source, edge.target);
-                                    const isHighlight = color === COLORS.edgeActive;
-                                    
-                                    return React.createElement("line", {
-                                        key: `edge-${idx}`,
-                                        x1: s.x, y1: s.y, x2: t.x, y2: t.y,
-                                        stroke: color, 
-                                        strokeWidth: isHighlight ? 4 : 2,
-                                        markerEnd: isHighlight ? "url(#arrowhead-active)" : "url(#arrowhead)",
-                                        className: "line-transition pointer-events-none"
-                                    });
-                                }),
+                            /* Instruction Block */
+                            React.createElement("div", { className: "w-full min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center text-center shadow-sm" },
+                                React.createElement("p", { className: "text-md text-blue-100 font-medium animate-fade-in" }, currentStep.description)
+                            ),
 
-                                /* Nodes */
-                                graph.nodes.map((node) => {
-                                    const inDegree = currentStep.inDegrees[node.id] ?? 0;
-                                    const isDraggingThis = draggingNode === node.id;
-                                    const color = getNodeColor(node.id);
+                            /* Main Visualization Card */
+                            React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 sm:p-6 flex flex-col gap-6" },
+                                
+                                /* Legend */
+                                React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300 border-b border-slate-700 pb-4" },
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.zeroDegree } }), " In Queue (0 In-Degree)"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.processing } }), " Processing"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.neighbor } }), " Neighbor Update"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.sorted } }), " Sorted"
+                                    )
+                                ),
 
-                                    return React.createElement("g", { 
-                                        key: `node-${node.id}`, 
-                                        className: `node-transition node-interactive ${isDraggingThis ? 'cursor-grabbing' : 'cursor-grab'}`,
-                                        onMouseDown: (e) => handleNodeMouseDown(e, node.id)
-                                    },
-                                        /* Outer Circle */
-                                        React.createElement("circle", {
-                                            cx: node.x, cy: node.y, r: 24,
-                                            fill: color,
-                                            stroke: isDraggingThis ? '#3b82f6' : "#0f172a", 
-                                            strokeWidth: isDraggingThis ? 4 : 3,
-                                            className: "node-transition"
-                                        }),
-                                        /* Node Label */
-                                        React.createElement("text", {
-                                            x: node.x, y: node.y, dy: 5,
-                                            textAnchor: "middle", fill: "#fff",
-                                            fontWeight: "bold", fontSize: 16,
-                                            className: "pointer-events-none"
-                                        }, node.label),
-                                        /* In-Degree Badge (Floating Top Right) */
-                                        React.createElement("g", { transform: `translate(${node.x + 18}, ${node.y - 18})` },
-                                            React.createElement("circle", { r: 10, fill: "#1e293b", stroke: color, strokeWidth: 2 }),
-                                            React.createElement("text", { 
-                                                dy: 3, textAnchor: "middle", fill: "white", fontSize: 10, fontWeight: "bold" 
-                                            }, inDegree)
-                                        )
-                                    );
-                                })
-                            )
-                        ),
-                        
-                        /* Zoom Controls */
-                        React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-2 rounded-lg shadow-xl border border-slate-700" },
-                            React.createElement("button", { onClick: handleZoomIn, className: "p-2 hover:bg-slate-700 text-slate-300 rounded" }, React.createElement(ZoomIn, { size: 20 })),
-                            React.createElement("button", { onClick: handleZoomOut, className: "p-2 hover:bg-slate-700 text-slate-300 rounded" }, React.createElement(ZoomOut, { size: 20 })),
-                            React.createElement("div", { className: "h-px bg-slate-700 w-full my-1" }),
-                            React.createElement("button", { onClick: handleFitView, className: "p-2 hover:bg-slate-700 text-blue-400 rounded" }, React.createElement(Maximize, { size: 20 }))
-                        )
-                    ),
+                                /* Visualization Canvas */
+                                React.createElement("div", { 
+                                    className: `relative w-full h-[400px] sm:h-[500px] bg-slate-900 rounded-lg border border-slate-700 overflow-hidden shadow-inner ${isPanning ? 'cursor-grabbing' : 'grab-cursor'}`,
+                                    onMouseDown: handleCanvasMouseDown,
+                                    onMouseMove: handleMouseMove,
+                                    onMouseUp: handleMouseUp,
+                                    onMouseLeave: handleMouseUp
+                                },
+                                    /* Dots Grid */
+                                    React.createElement("div", { 
+                                        className: "absolute inset-0 pointer-events-none opacity-20", 
+                                        style: { 
+                                            backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)', 
+                                            backgroundSize: '20px 20px',
+                                            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                                            transformOrigin: 'center'
+                                        } 
+                                    }),
 
-                    /* Data Display Area (Stacked Layout: In-Degree Top, Sort Order Bottom) */
-                    React.createElement("div", { className: "flex flex-col gap-6 w-full" },
-                        
-                        /* Top: In-Degree Table */
-                        React.createElement("div", { className: "flex flex-col gap-2 w-full" },
-                            React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "In-Degrees Table"),
-                            React.createElement("div", { className: "flex gap-2 overflow-x-auto p-2 w-full" },
-                                graph.nodes.map(node => {
-                                    const deg = currentStep.inDegrees[node.id] ?? 0;
-                                    const isUpdated = currentStep.type === 'check' && currentStep.highlightNeighbor === node.id;
-                                    const isZero = deg === 0;
-                                    
-                                    return React.createElement("div", { key: node.id, className: `flex flex-col items-center justify-center min-w-[3rem] h-14 rounded-lg border transition-all duration-300 ${
-                                        isUpdated ? 'bg-blue-900/50 border-blue-500 scale-110' : 
-                                        isZero ? 'bg-amber-900/20 border-amber-500/50' : 'bg-slate-700 border-slate-600'
-                                    }` },
-                                        React.createElement("span", { className: "text-[10px] text-slate-400 font-bold mb-0.5" }, node.label),
-                                        React.createElement("span", { className: `font-mono text-lg font-bold ${isZero ? 'text-amber-400' : 'text-white'}` }, deg)
-                                    );
-                                })
-                            )
-                        ),
-
-                        /* Middle: Queue Block */
-                        React.createElement("div", { className: "flex flex-col gap-2 w-full" },
-                            React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "Queue (Nodes with 0 In-Degree)"),
-                            React.createElement("div", { className: "flex items-center gap-2 overflow-x-auto h-16 bg-slate-900/30 rounded-lg border border-slate-700 px-3 w-full" },
-                                currentStep.queue.length === 0 
-                                    ? React.createElement("span", { className: "text-slate-600 text-sm italic pl-2" }, "Queue is empty")
-                                    : currentStep.queue.map((nodeId, idx) => (
-                                        React.createElement("div", { key: `q-${nodeId}-${idx}`, className: "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500 text-amber-500 font-bold text-sm shadow-sm animate-fade-in" },
-                                            graph.nodes[nodeId].label
-                                        )
-                                    ))
-                            )
-                        ),
-
-                        /* Bottom: Topological Sort Result */
-                        React.createElement("div", { className: "flex flex-col gap-2 w-full" },
-                            React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "Topological Sort Order"),
-                            React.createElement("div", { className: "flex items-center gap-2 overflow-x-auto h-16 bg-slate-900/50 rounded-lg border border-slate-700 px-3 w-full" },
-                                currentStep.sortedOrder.length === 0 
-                                    ? React.createElement("span", { className: "text-slate-600 text-sm italic" }, "Result sequence will appear here...")
-                                    : currentStep.sortedOrder.map((nodeId, idx) => (
-                                        React.createElement("div", { key: `res-${nodeId}`, className: "flex items-center animate-fade-in" },
-                                            React.createElement("div", { className: "w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-sm border border-emerald-400 shadow-lg" },
-                                                graph.nodes[nodeId].label
+                                    /* SVG Content */
+                                    React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full" },
+                                        React.createElement("defs", null,
+                                            React.createElement("marker", {
+                                                id: "arrowhead", markerWidth: "10", markerHeight: "7",
+                                                refX: "28", refY: "3.5", orient: "auto"
+                                            },
+                                                React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: "#334155" })
                                             ),
-                                            idx < currentStep.sortedOrder.length - 1 && React.createElement(ArrowRight, { size: 14, className: "ml-2 text-slate-600" })
+                                            React.createElement("marker", {
+                                                id: "arrowhead-active", markerWidth: "10", markerHeight: "7",
+                                                refX: "28", refY: "3.5", orient: "auto"
+                                            },
+                                                React.createElement("polygon", { points: "0 0, 10 3.5, 0 7", fill: COLORS.edgeActive })
+                                            )
+                                        ),
+                                        
+                                        React.createElement("g", { 
+                                            style: { 
+                                                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                                                transformOrigin: 'center',
+                                                transition: (isPanning || draggingNode !== null) ? 'none' : 'transform 0.1s ease-out'
+                                            }
+                                        },
+                                            /* Edges */
+                                            graph.edges.map((edge, idx) => {
+                                                const s = graph.nodes.find(n => n.id === edge.source);
+                                                const t = graph.nodes.find(n => n.id === edge.target);
+                                                if (!s || !t) return null;
+                                                const color = getEdgeColor(edge.source, edge.target);
+                                                const isHighlight = color === COLORS.edgeActive;
+                                                
+                                                return React.createElement("line", {
+                                                    key: `edge-${idx}`,
+                                                    x1: s.x, y1: s.y, x2: t.x, y2: t.y,
+                                                    stroke: color, 
+                                                    strokeWidth: isHighlight ? 4 : 2,
+                                                    markerEnd: isHighlight ? "url(#arrowhead-active)" : "url(#arrowhead)",
+                                                    className: "line-transition pointer-events-none"
+                                                });
+                                            }),
+
+                                            /* Nodes */
+                                            graph.nodes.map((node) => {
+                                                const inDegree = currentStep.inDegrees[node.id] ?? 0;
+                                                const isDraggingThis = draggingNode === node.id;
+                                                const color = getNodeColor(node.id);
+
+                                                return React.createElement("g", { 
+                                                    key: `node-${node.id}`, 
+                                                    className: `node-transition node-interactive ${isDraggingThis ? 'cursor-grabbing' : 'cursor-grab'}`,
+                                                    onMouseDown: (e) => handleNodeMouseDown(e, node.id)
+                                                },
+                                                    /* Outer Circle */
+                                                    React.createElement("circle", {
+                                                        cx: node.x, cy: node.y, r: 24,
+                                                        fill: color,
+                                                        stroke: isDraggingThis ? '#3b82f6' : "#0f172a", 
+                                                        strokeWidth: isDraggingThis ? 4 : 3,
+                                                        className: "node-transition"
+                                                    }),
+                                                    /* Node Label */
+                                                    React.createElement("text", {
+                                                        x: node.x, y: node.y, dy: 5,
+                                                        textAnchor: "middle", fill: "#fff",
+                                                        fontWeight: "bold", fontSize: 16,
+                                                        className: "pointer-events-none"
+                                                    }, node.label),
+                                                    /* In-Degree Badge (Floating Top Right) */
+                                                    React.createElement("g", { transform: `translate(${node.x + 18}, ${node.y - 18})` },
+                                                        React.createElement("circle", { r: 10, fill: "#1e293b", stroke: color, strokeWidth: 2 }),
+                                                        React.createElement("text", { 
+                                                            dy: 3, textAnchor: "middle", fill: "white", fontSize: 10, fontWeight: "bold" 
+                                                        }, inDegree)
+                                                    )
+                                                );
+                                            })
                                         )
-                                    ))
-                            )
-                        )
-                    ),
-                    
-                    /* Footer */
-                    React.createElement("div", { className: "w-full flex justify-between items-center text-xs text-slate-500 border-t border-slate-700 pt-4 mt-2" },
-                        React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
-                        React.createElement("div", { className: "hidden sm:block w-1/3 h-1 bg-slate-700 rounded-full mx-4" },
-                            React.createElement("div", { 
-                                className: "h-full bg-blue-500 rounded-full transition-all duration-100",
-                                style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
-                            })
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            isFinished && React.createElement(CheckCircle2, { size: 14, className: "text-emerald-500" }),
-                            React.createElement("span", { className: isFinished ? "text-emerald-500" : "" }, 
-                                isFinished ? "Sort Complete" : "Processing..."
+                                    ),
+                                    
+                                    /* Zoom Controls */
+                                    React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-2 rounded-lg shadow-xl border border-slate-700" },
+                                        React.createElement("button", { onClick: handleZoomIn, className: "p-2 hover:bg-slate-700 text-slate-300 rounded" }, React.createElement(ZoomIn, { size: 20 })),
+                                        React.createElement("button", { onClick: handleZoomOut, className: "p-2 hover:bg-slate-700 text-slate-300 rounded" }, React.createElement(ZoomOut, { size: 20 })),
+                                        React.createElement("div", { className: "h-px bg-slate-700 w-full my-1" }),
+                                        React.createElement("button", { onClick: handleFitView, className: "p-2 hover:bg-slate-700 text-blue-400 rounded" }, React.createElement(Maximize, { size: 20 }))
+                                    )
+                                ),
+
+                                /* Data Display Area (Stacked Layout: In-Degree Top, Sort Order Bottom) */
+                                React.createElement("div", { className: "flex flex-col gap-6 w-full" },
+                                    
+                                    /* Top: In-Degree Table */
+                                    React.createElement("div", { className: "flex flex-col gap-2 w-full" },
+                                        React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "In-Degrees Table"),
+                                        React.createElement("div", { className: "flex gap-2 overflow-x-auto p-2 w-full" },
+                                            graph.nodes.map(node => {
+                                                const deg = currentStep.inDegrees[node.id] ?? 0;
+                                                const isUpdated = currentStep.type === 'check' && currentStep.highlightNeighbor === node.id;
+                                                const isZero = deg === 0;
+                                                
+                                                return React.createElement("div", { key: node.id, className: `flex flex-col items-center justify-center min-w-[3rem] h-14 rounded-lg border transition-all duration-300 ${
+                                                    isUpdated ? 'bg-blue-900/50 border-blue-500 scale-110' : 
+                                                    isZero ? 'bg-amber-900/20 border-amber-500/50' : 'bg-slate-700 border-slate-600'
+                                                }` },
+                                                    React.createElement("span", { className: "text-[10px] text-slate-400 font-bold mb-0.5" }, node.label),
+                                                    React.createElement("span", { className: `font-mono text-lg font-bold ${isZero ? 'text-amber-400' : 'text-white'}` }, deg)
+                                                );
+                                            })
+                                        )
+                                    ),
+
+                                    /* Middle: Queue Block */
+                                    React.createElement("div", { className: "flex flex-col gap-2 w-full" },
+                                        React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "Queue (Nodes with 0 In-Degree)"),
+                                        React.createElement("div", { className: "flex items-center gap-2 overflow-x-auto h-16 bg-slate-900/30 rounded-lg border border-slate-700 px-3 w-full" },
+                                            currentStep.queue.length === 0 
+                                                ? React.createElement("span", { className: "text-slate-600 text-sm italic pl-2" }, "Queue is empty")
+                                                : currentStep.queue.map((nodeId, idx) => (
+                                                    React.createElement("div", { key: `q-${nodeId}-${idx}`, className: "flex-shrink-0 flex items-center justify-center w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500 text-amber-500 font-bold text-sm shadow-sm animate-fade-in" },
+                                                        graph.nodes[nodeId].label
+                                                    )
+                                                ))
+                                        )
+                                    ),
+
+                                    /* Bottom: Topological Sort Result */
+                                    React.createElement("div", { className: "flex flex-col gap-2 w-full" },
+                                        React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "Topological Sort Order"),
+                                        React.createElement("div", { className: "flex items-center gap-2 overflow-x-auto h-16 bg-slate-900/50 rounded-lg border border-slate-700 px-3 w-full" },
+                                            currentStep.sortedOrder.length === 0 
+                                                ? React.createElement("span", { className: "text-slate-600 text-sm italic" }, "Result sequence will appear here...")
+                                                : currentStep.sortedOrder.map((nodeId, idx) => (
+                                                    React.createElement("div", { key: `res-${nodeId}`, className: "flex items-center animate-fade-in" },
+                                                        React.createElement("div", { className: "w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-sm border border-emerald-400 shadow-lg" },
+                                                            graph.nodes[nodeId].label
+                                                        ),
+                                                        idx < currentStep.sortedOrder.length - 1 && React.createElement(ArrowRight, { size: 14, className: "ml-2 text-slate-600" })
+                                                    )
+                                                ))
+                                        )
+                                    )
+                                ),
+                                
+                                /* Footer */
+                                React.createElement("div", { className: "w-full flex justify-between items-center text-xs text-slate-500 border-t border-slate-700 pt-4 mt-2" },
+                                    React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                                    React.createElement("div", { className: "hidden sm:block w-1/3 h-1 bg-slate-700 rounded-full mx-4" },
+                                        React.createElement("div", { 
+                                            className: "h-full bg-blue-500 rounded-full transition-all duration-100",
+                                            style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
+                                        })
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        isFinished && React.createElement(CheckCircle2, { size: 14, className: "text-emerald-500" }),
+                                        React.createElement("span", { className: isFinished ? "text-emerald-500" : "" }, 
+                                            isFinished ? "Sort Complete" : "Processing..."
+                                        )
+                                    )
+                                )
                             )
                         )
                     )
-                )
                 )
             );
         };

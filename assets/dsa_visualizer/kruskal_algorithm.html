@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kruskal's Algorithm Visualizer</title>
+    <title>Kruskal's Algorithm Visualizer (MST)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -44,6 +44,7 @@
         .grab-cursor { cursor: grab; }
         .grab-cursor:active { cursor: grabbing; }
         
+        /* Node specific cursor */
         .node-interactive { cursor: grab; }
         .node-interactive:active { cursor: grabbing; }
     </style>
@@ -54,12 +55,12 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitMerge, CheckCircle2, ZoomIn, ZoomOut, Maximize, XCircle, Database } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, GitMerge, CheckCircle2, ZoomIn, ZoomOut, Maximize, Settings, Activity, Ungroup } from 'lucide-react';
 
         const KruskalsVisualizer = () => {
             // -- State --
             const [nodeCount, setNodeCount] = useState(8);
-            const [density, setDensity] = useState(1.5); 
+            const [edgeDensity, setEdgeDensity] = useState(1.1); 
             const [animationSpeed, setAnimationSpeed] = useState(1000); 
             const [graph, setGraph] = useState({ nodes: [], edges: [] });
             const [steps, setSteps] = useState([]);
@@ -67,7 +68,7 @@
             const [isPlaying, setIsPlaying] = useState(false);
             const [isFinished, setIsFinished] = useState(false);
             
-            // Zoom & Pan State
+            // Zoom & Pan & Drag State
             const [zoom, setZoom] = useState(1);
             const [pan, setPan] = useState({ x: 0, y: 0 });
             const [isPanning, setIsPanning] = useState(false); 
@@ -75,35 +76,53 @@
             const lastMousePos = useRef({ x: 0, y: 0 });
 
             const timerRef = useRef(null);
-            const scrollRef = useRef(null); // For auto-scrolling the edge list
             const CANVAS_WIDTH = 900;
             const CANVAS_HEIGHT = 600; 
 
-            // -- Colors & Palettes --
-            // Palette for Disjoint Sets (Distinct colors to show connected components)
-            const SET_COLORS = [
-                '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#06b6d4', '#0ea5e9', '#3b82f6', 
-                '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e', '#fb7185', '#a78bfa', '#2dd4bf'
-            ];
+            // Calculate sorted edges for the queue visualization
+            const sortedEdges = React.useMemo(() => {
+                return [...graph.edges].sort((a, b) => a.weight - b.weight);
+            }, [graph.edges]);
 
+            // -- Colors --
             const COLORS = {
-                default: '#475569', // Slate 600
-                processing: '#fbbf24', // Amber 400 (Current Edge)
-                accepted: '#0ea5e9', // Sky 500 (In MST)
-                rejected: '#ef4444', // Red 500 (Cycle)
+                defaultNode: '#475569', // Slate 600
+                checking: '#f59e0b',    // Amber 500 (Checking edge)
+                mstEdge: '#10b981',     // Emerald 500 (Final MST Edge)
+                rejected: '#ef4444',    // Red 500 (Cycle detected)
                 edgeDefault: '#334155', // Slate 700
+                edgeFaded: '#1e293b',   // Slate 800 (Rejected edges fade out)
                 text: '#e2e8f0'
             };
 
-            // -- Physics Layout Logic --
+            // Palette for disjoint sets (to color nodes by component)
+            const SET_COLORS = [
+                '#3b82f6', // Blue
+                '#8b5cf6', // Violet
+                '#ec4899', // Pink
+                '#f43f5e', // Rose
+                '#f97316', // Orange
+                '#eab308', // Yellow
+                '#84cc16', // Lime
+                '#14b8a6', // Teal
+                '#06b6d4', // Cyan
+                '#6366f1', // Indigo
+                '#d946ef', // Fuchsia
+                '#f59e0b', // Amber
+                '#10b981', // Emerald
+                '#3b82f6', // Blue Repeat
+                '#8b5cf6'  // Violet Repeat
+            ];
+
+            // -- Physics Layout Logic (Reused) --
             const runForceLayout = (nodes, edges, width, height) => {
                 const iterations = 300; 
-                const repulsion = 8000; 
-                const springLength = 180; 
-                const k = 0.04; 
+                const repulsion = 10000; 
+                const springLength = 220; 
+                const k = 0.03; 
                 const damping = 0.85;
-                const centerForce = 0.02; 
-                const collisionRadius = 80; 
+                const centerForce = 0.015; 
+                const collisionRadius = 90; 
 
                 let velocities = nodes.map(() => ({ x: 0, y: 0 }));
 
@@ -122,14 +141,19 @@
                             const dy = nodes[a].y - nodes[b].y;
                             let distSq = dx * dx + dy * dy || 1;
                             let dist = Math.sqrt(distSq);
+                            
                             const force = repulsion / distSq; 
-                            velocities[a].x += (dx / dist) * force;
-                            velocities[a].y += (dy / dist) * force;
+                            const fx = (dx / dist) * force;
+                            const fy = (dy / dist) * force;
+
+                            velocities[a].x += fx;
+                            velocities[a].y += fy;
 
                             if (dist < collisionRadius) {
                                 const overlap = collisionRadius - dist;
-                                velocities[a].x += (dx / dist) * overlap * 0.8;
-                                velocities[a].y += (dy / dist) * overlap * 0.8;
+                                const separationForce = overlap * 0.8; 
+                                velocities[a].x += (dx / dist) * separationForce;
+                                velocities[a].y += (dy / dist) * separationForce;
                             }
                         }
                     }
@@ -138,14 +162,19 @@
                         const sourceIdx = nodes.findIndex(n => n.id === edge.source);
                         const targetIdx = nodes.findIndex(n => n.id === edge.target);
                         if (sourceIdx === -1 || targetIdx === -1) return;
+
                         const dx = nodes[targetIdx].x - nodes[sourceIdx].x;
                         const dy = nodes[targetIdx].y - nodes[sourceIdx].y;
                         const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
                         const force = (dist - springLength) * k;
-                        velocities[sourceIdx].x += (dx / dist) * force;
-                        velocities[sourceIdx].y += (dy / dist) * force;
-                        velocities[targetIdx].x -= (dx / dist) * force;
-                        velocities[targetIdx].y -= (dy / dist) * force;
+                        const fx = (dx / dist) * force;
+                        const fy = (dy / dist) * force;
+
+                        velocities[sourceIdx].x += fx;
+                        velocities[sourceIdx].y += fy;
+                        velocities[targetIdx].x -= fx;
+                        velocities[targetIdx].y -= fy;
                     });
 
                     nodes.forEach((node, idx) => {
@@ -153,6 +182,7 @@
                         node.y += velocities[idx].y;
                         velocities[idx].x *= damping;
                         velocities[idx].y *= damping;
+
                         const padding = 60;
                         node.x = Math.max(padding, Math.min(width - padding, node.x));
                         node.y = Math.max(padding, Math.min(height - padding, node.y));
@@ -161,10 +191,10 @@
             };
 
             // -- Graph Generation --
-            const generateGraph = useCallback((count, edgeDensity) => {
+            const generateGraph = useCallback((count, density) => { 
                 const nodes = [];
                 const edges = [];
-                
+
                 for (let i = 0; i < count; i++) {
                     nodes.push({ 
                         id: i, 
@@ -174,14 +204,14 @@
                     });
                 }
 
-                // Ensure connectivity roughly
+                // Ensure connectivity: Chain them first
                 for(let i=0; i<count-1; i++){
-                    const weight = Math.floor(Math.random() * 15) + 1;
-                    edges.push({ source: i, target: i+1, weight, id: `e-${i}-${i+1}` });
+                    const weight = Math.floor(Math.random() * 9) + 1;
+                    edges.push({ source: i, target: i+1, weight, id: `edge-init-${i}` });
                 }
                 
-                // density controls the multiplier for extra edges
-                const extraEdges = Math.floor(count * edgeDensity); 
+                // Add random edges based on density
+                const extraEdges = Math.floor(count * density); 
                 let attempts = 0;
                 while(edges.length < (count - 1) + extraEdges && attempts < 200) {
                     const source = Math.floor(Math.random() * count);
@@ -189,8 +219,8 @@
                     attempts++;
                     
                     if(source !== target && !edges.find(e => (e.source === source && e.target === target) || (e.source === target && e.target === source))) {
-                        const weight = Math.floor(Math.random() * 15) + 1;
-                        edges.push({ source, target, weight, id: `e-${source}-${target}` });
+                        const weight = Math.floor(Math.random() * 9) + 1;
+                        edges.push({ source, target, weight, id: `edge-rand-${attempts}` });
                     }
                 }
 
@@ -198,140 +228,131 @@
                 return { nodes, edges };
             }, []);
 
-            // -- Union Find Class --
-            class UnionFind {
-                constructor(size) {
-                    this.parent = Array.from({ length: size }, (_, i) => i);
-                    this.rank = Array(size).fill(0);
-                }
-                find(i) {
-                    if (this.parent[i] !== i) {
-                        this.parent[i] = this.find(this.parent[i]);
-                    }
-                    return this.parent[i];
-                }
-                union(i, j) {
-                    const rootI = this.find(i);
-                    const rootJ = this.find(j);
-                    if (rootI !== rootJ) {
-                        // Union by rank
-                        if (this.rank[rootI] < this.rank[rootJ]) {
-                            this.parent[rootI] = rootJ;
-                        } else if (this.rank[rootI] > this.rank[rootJ]) {
-                            this.parent[rootJ] = rootI;
-                        } else {
-                            this.parent[rootJ] = rootI;
-                            this.rank[rootI]++;
-                        }
-                        return true; // Union successful
-                    }
-                    return false; // Cycle detected
-                }
-                getParents() {
-                    // Flatten parents to current roots for visualization
-                    return this.parent.map((_, i) => this.find(i));
-                }
-            }
-
-            // -- Kruskal's Algorithm Steps --
-            const generateKruskalSteps = (graphData) => {
+            // -- Kruskal's Logic --
+            const generateKruskalsSteps = (graphData) => {
                 const stepsLog = [];
                 const { nodes, edges } = graphData;
+                const n = nodes.length;
                 
-                // 1. Sort Edges
+                // Sort edges by weight
                 const sortedEdges = [...edges].sort((a, b) => a.weight - b.weight);
-                const uf = new UnionFind(nodes.length);
+                
+                // Union-Find Structures
+                const parent = {};
+                nodes.forEach(node => parent[node.id] = node.id);
+                
                 const mstEdges = new Set();
                 const rejectedEdges = new Set();
-                let totalWeight = 0;
+                let currentMSTWeight = 0;
+                
+                // Helper for Find
+                const find = (i, currentParentState) => {
+                    let root = i;
+                    while (currentParentState[root] !== root) {
+                        root = currentParentState[root];
+                    }
+                    return root;
+                };
 
-                // Initial Step
+                // Helper to get component ID for all nodes for visualization
+                const getComponentMap = (currentParentState) => {
+                    const map = {};
+                    nodes.forEach(node => {
+                        map[node.id] = find(node.id, currentParentState);
+                    });
+                    return map;
+                };
+
+                // Step 0: Initial State
                 stepsLog.push({
-                    edgeQueue: sortedEdges.map(e => ({ ...e, status: 'pending' })),
+                    components: getComponentMap(parent),
+                    mstEdges: new Set(mstEdges),
+                    rejectedEdges: new Set(rejectedEdges),
+                    mstWeight: currentMSTWeight,
                     currentEdge: null,
-                    nodeSets: uf.getParents(),
-                    mstEdges: new Set(),
-                    rejectedEdges: new Set(),
-                    totalWeight: 0,
-                    description: "Initialized. Edges sorted by weight. Nodes are their own distinct sets."
+                    type: 'start',
+                    description: `Initialized graph. Sorted all ${edges.length} edges by weight. Each node is currently its own set.`
                 });
 
-                // Loop through sorted edges
+                // Iterate through sorted edges
                 for (let i = 0; i < sortedEdges.length; i++) {
                     const edge = sortedEdges[i];
                     const u = edge.source;
                     const v = edge.target;
+                    
+                    const rootU = find(u, parent);
+                    const rootV = find(v, parent);
 
-                    // Step: Picking an edge to check
+                    // Step: Check Edge
                     stepsLog.push({
-                        edgeQueue: sortedEdges.map((e, idx) => ({
-                            ...e,
-                            status: idx < i ? (mstEdges.has(e.id) ? 'accepted' : 'rejected') : (idx === i ? 'processing' : 'pending')
-                        })),
-                        currentEdge: edge,
-                        nodeSets: uf.getParents(),
+                        components: getComponentMap(parent),
                         mstEdges: new Set(mstEdges),
                         rejectedEdges: new Set(rejectedEdges),
-                        totalWeight,
+                        mstWeight: currentMSTWeight,
+                        currentEdge: edge,
                         type: 'check',
-                        description: `Checking Edge ${nodes[u].label}-${nodes[v].label} (Weight: ${edge.weight}). Do they belong to different sets?`
+                        description: `Checking edge ${nodes[u].label}-${nodes[v].label} (Weight: ${edge.weight}). Roots: ${nodes[rootU].label} vs ${nodes[rootV].label}.`
                     });
 
-                    const rootU = uf.find(u);
-                    const rootV = uf.find(v);
-
                     if (rootU !== rootV) {
-                        // No cycle, add to MST
-                        uf.union(u, v);
-                        mstEdges.add(edge.id);
-                        totalWeight += edge.weight;
-
+                        // Union
+                        parent[rootV] = rootU; // Merge sets
+                        mstEdges.add(`${Math.min(u,v)}-${Math.max(u,v)}`);
+                        currentMSTWeight += edge.weight;
+                        
+                        // Step: Add Edge (Union)
                         stepsLog.push({
-                            edgeQueue: sortedEdges.map((e, idx) => ({
-                                ...e,
-                                status: idx < i ? (mstEdges.has(e.id) ? 'accepted' : 'rejected') : (idx === i ? 'accepted' : 'pending')
-                            })),
-                            currentEdge: edge,
-                            nodeSets: uf.getParents(), // Sets have merged
+                            components: getComponentMap(parent),
                             mstEdges: new Set(mstEdges),
                             rejectedEdges: new Set(rejectedEdges),
-                            totalWeight,
+                            mstWeight: currentMSTWeight,
+                            currentEdge: edge,
                             type: 'add',
-                            description: `Sets are different! Adding Edge ${nodes[u].label}-${nodes[v].label} to MST. Sets merged.`
+                            description: `Roots are different! No cycle. Adding ${nodes[u].label}-${nodes[v].label} to MST and merging sets.`
                         });
                     } else {
                         // Cycle detected
-                        rejectedEdges.add(edge.id);
+                        rejectedEdges.add(`${Math.min(u,v)}-${Math.max(u,v)}`);
+                        
+                        // Step: Reject Edge
                         stepsLog.push({
-                            edgeQueue: sortedEdges.map((e, idx) => ({
-                                ...e,
-                                status: idx < i ? (mstEdges.has(e.id) ? 'accepted' : 'rejected') : (idx === i ? 'rejected' : 'pending')
-                            })),
-                            currentEdge: edge,
-                            nodeSets: uf.getParents(),
+                            components: getComponentMap(parent),
                             mstEdges: new Set(mstEdges),
                             rejectedEdges: new Set(rejectedEdges),
-                            totalWeight,
+                            mstWeight: currentMSTWeight,
+                            currentEdge: edge,
                             type: 'reject',
-                            description: `Cycle detected! Nodes ${nodes[u].label} and ${nodes[v].label} are already in the same set. Rejecting edge.`
+                            description: `Roots are the same (${nodes[rootU].label}). Cycle detected! Rejecting edge ${nodes[u].label}-${nodes[v].label}.`
                         });
+                    }
+
+                    // Check if MST is complete (V-1 edges)
+                    if (mstEdges.size === n - 1) {
+                         stepsLog.push({
+                            components: getComponentMap(parent),
+                            mstEdges: new Set(mstEdges),
+                            rejectedEdges: new Set(rejectedEdges),
+                            mstWeight: currentMSTWeight,
+                            currentEdge: null,
+                            type: 'early-finish',
+                            description: `MST has ${n-1} edges. Algorithm complete! All nodes connected.`
+                        });
+                        break;
                     }
                 }
 
-                // Final Step
-                stepsLog.push({
-                    edgeQueue: sortedEdges.map(e => ({
-                        ...e,
-                        status: mstEdges.has(e.id) ? 'accepted' : (rejectedEdges.has(e.id) ? 'rejected' : 'pending')
-                    })),
-                    currentEdge: null,
-                    nodeSets: uf.getParents(),
-                    mstEdges: new Set(mstEdges),
-                    rejectedEdges: new Set(rejectedEdges),
-                    totalWeight,
-                    type: 'finished',
-                    description: `Algorithm Complete. Minimum Spanning Tree found with Total Cost: ${totalWeight}.`
-                });
+                // Final Step if loop finishes
+                if (stepsLog[stepsLog.length - 1].type !== 'early-finish') {
+                    stepsLog.push({
+                        components: getComponentMap(parent),
+                        mstEdges: new Set(mstEdges),
+                        rejectedEdges: new Set(rejectedEdges),
+                        mstWeight: currentMSTWeight,
+                        currentEdge: null,
+                        type: 'finished',
+                        description: "Kruskal's Algorithm Complete. Minimum Spanning Tree constructed."
+                    });
+                }
 
                 return stepsLog;
             };
@@ -339,25 +360,15 @@
             // -- Effects --
             useEffect(() => {
                 reset();
-            }, [nodeCount, density]);
-
-            // Scroll into view logic for the bottom panel
-            useEffect(() => {
-                if (scrollRef.current) {
-                    const activeElement = scrollRef.current.querySelector('.border-amber-400');
-                    if (activeElement) {
-                        activeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-                    }
-                }
-            }, [currentStepIndex]);
+            }, [nodeCount, edgeDensity]); 
 
             const reset = () => {
                 setIsPlaying(false);
                 setIsFinished(false);
                 setCurrentStepIndex(0);
-                const newGraph = generateGraph(nodeCount, density);
+                const newGraph = generateGraph(nodeCount, edgeDensity);
                 setGraph(newGraph);
-                const newSteps = generateKruskalSteps(newGraph);
+                const newSteps = generateKruskalsSteps(newGraph);
                 setSteps(newSteps);
             };
 
@@ -381,7 +392,7 @@
                 return () => clearInterval(timerRef.current);
             }, [isPlaying, steps.length, animationSpeed]);
 
-            // -- Navigation Handlers --
+            // -- Handlers --
             const handleNext = () => {
                 if (currentStepIndex < steps.length - 1) {
                     setCurrentStepIndex(prev => prev + 1);
@@ -409,21 +420,12 @@
                 }
             };
 
-            // -- Mouse Interaction Handlers --
+            // -- Zoom / Pan / Drag Handlers --
             const handleZoomIn = (e) => { e.stopPropagation(); setZoom(z => Math.min(z * 1.2, 4)); };
             const handleZoomOut = (e) => { e.stopPropagation(); setZoom(z => Math.max(z / 1.2, 0.5)); };
             const handleFitView = (e) => { e.stopPropagation(); setZoom(1); setPan({ x: 0, y: 0 }); };
-            
-            const handleCanvasMouseDown = (e) => {
-                setIsPanning(true);
-                lastMousePos.current = { x: e.clientX, y: e.clientY };
-            };
-
-            const handleNodeMouseDown = (e, nodeId) => {
-                e.stopPropagation();
-                setDraggingNode(nodeId);
-                lastMousePos.current = { x: e.clientX, y: e.clientY };
-            };
+            const handleCanvasMouseDown = (e) => { setIsPanning(true); lastMousePos.current = { x: e.clientX, y: e.clientY }; };
+            const handleNodeMouseDown = (e, nodeId) => { e.stopPropagation(); setDraggingNode(nodeId); lastMousePos.current = { x: e.clientX, y: e.clientY }; };
 
             const handleMouseMove = (e) => {
                 const dx = e.clientX - lastMousePos.current.x;
@@ -431,287 +433,385 @@
                 lastMousePos.current = { x: e.clientX, y: e.clientY };
 
                 if (draggingNode !== null) {
-                    setGraph(prev => ({
-                        ...prev,
-                        nodes: prev.nodes.map(n => n.id === draggingNode ? { ...n, x: n.x + dx/zoom, y: n.y + dy/zoom } : n)
+                    setGraph(prevGraph => ({
+                        ...prevGraph,
+                        nodes: prevGraph.nodes.map(node => {
+                            if (node.id === draggingNode) {
+                                return { ...node, x: node.x + dx / zoom, y: node.y + dy / zoom };
+                            }
+                            return node;
+                        })
                     }));
                 } else if (isPanning) {
                     setPan(p => ({ x: p.x + dx, y: p.y + dy }));
                 }
             };
 
-            const handleMouseUp = () => {
-                setIsPanning(false);
-                setDraggingNode(null);
-            };
+            const handleMouseUp = () => { setIsPanning(false); setDraggingNode(null); };
 
-            // -- Render Helpers --
-            const currentStep = steps[currentStepIndex] || { nodeSets: [], mstEdges: new Set(), rejectedEdges: new Set(), edgeQueue: [], description: "Ready...", totalWeight: 0 };
-
-            // Get color for a node based on its Set ID
+            // -- Render Logic --
+            const currentStep = steps[currentStepIndex] || { components: {}, mstEdges: new Set(), rejectedEdges: new Set(), description: "Ready...", mstWeight: 0 };
+            
             const getNodeColor = (nodeId) => {
-                const setId = currentStep.nodeSets[nodeId];
-                if (setId === undefined) return COLORS.default;
-                return SET_COLORS[setId % SET_COLORS.length];
+                // In Kruskal's, color by component ID to show sets merging
+                const componentId = currentStep.components[nodeId];
+                if (componentId !== undefined) {
+                    return SET_COLORS[componentId % SET_COLORS.length];
+                }
+                return COLORS.defaultNode;
             };
 
-            // Get color for an edge based on its status in current step
-            const getEdgeStyle = (edgeId, u, v) => {
-                if (currentStep.mstEdges.has(edgeId)) return { color: COLORS.accepted, width: 6, opacity: 1 };
-                if (currentStep.rejectedEdges.has(edgeId)) return { color: COLORS.rejected, width: 2, opacity: 0.2, dashed: true };
-                if (currentStep.currentEdge && currentStep.currentEdge.id === edgeId) return { color: COLORS.processing, width: 8, opacity: 1 };
-                return { color: COLORS.edgeDefault, width: 3, opacity: 0.5 };
+            const getEdgeColor = (u, v) => {
+                const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+
+                // 1. Checking
+                const ce = currentStep.currentEdge;
+                if (ce && ((ce.source === u && ce.target === v) || (ce.source === v && ce.target === u))) {
+                    if (currentStep.type === 'reject') return COLORS.rejected;
+                    if (currentStep.type === 'add') return COLORS.mstEdge;
+                    return COLORS.checking;
+                }
+
+                // 2. In MST
+                if (currentStep.mstEdges.has(edgeKey)) {
+                    return COLORS.mstEdge;
+                }
+
+                // 3. Rejected
+                if (currentStep.rejectedEdges.has(edgeKey)) {
+                    return COLORS.edgeFaded;
+                }
+
+                return COLORS.edgeDefault;
+            };
+
+            const getEdgeWidth = (u, v) => {
+                const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                const ce = currentStep.currentEdge;
+                
+                // Active check
+                if (ce && ((ce.source === u && ce.target === v) || (ce.source === v && ce.target === u))) return 7;
+                
+                // MST
+                if (currentStep.mstEdges.has(edgeKey)) return 6;
+
+                // Rejected or default
+                return 3;
+            };
+
+            const getEdgeOpacity = (u, v) => {
+                const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                if (currentStep.rejectedEdges.has(edgeKey)) return 0.2; // Fade out rejected
+                return 1;
             };
 
             return (
-                React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4" },
+                React.createElement("div", { className: "min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8 flex flex-col items-center" },
                 
-                /* Top Control Bar */
-                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-4 lg:gap-6 z-20 relative" },
-                    
-                    /* Title */
-                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
-                        React.createElement(GitMerge, { size: 32, className: "text-orange-500" }),
-                        React.createElement("div", { className: "flex flex-col" }, 
-                            React.createElement("h1", { className: "text-2xl font-bold text-orange-400 whitespace-nowrap" }, "Kruskal's Algorithm"),
-                            React.createElement("span", { className: "text-xs text-slate-400" }, "Minimum Spanning Tree (MST)")
+                    /* 1. Title Row */
+                    React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
+                        React.createElement(Ungroup, { size: 38, className: "text-indigo-500" }),
+                        React.createElement("div", { className: "flex flex-col" },
+                            React.createElement("h1", { className: "text-2xl font-bold text-indigo-400 whitespace-nowrap leading-none" }, "Kruskal's Algorithm"),
+                            React.createElement("span", { className: "text-sm text-slate-500 font-medium mt-1" }, "Minimum Spanning Tree (Disjoint Set Union)")
                         )
                     ),
 
-                    /* Controls Pill - Changed justify-center to justify-end */
-                    React.createElement("div", { className: "bg-slate-800 border border-slate-700 rounded-xl sm:rounded-full py-3 sm:py-2 px-4 sm:px-6 flex flex-wrap items-center justify-end gap-4 sm:gap-6 shadow-xl w-full lg:w-auto" },
+                    /* 2. Main Layout */
+                    React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
                         
-                        /* Speed Slider */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("span", { className: "text-xs text-slate-400 uppercase tracking-wider" }, "Speed"),
-                            React.createElement("input", {
-                                type: "range", min: "100", max: "1900", step: "100",
-                                value: animationSpeed,
-                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                            })
-                        ),
-
-                        React.createElement("div", { className: "h-6 w-px bg-slate-700 hidden sm:block" }),
-                        
-                        /* Buttons */
-                        React.createElement("div", { className: "flex items-center gap-3" },
-                            React.createElement("button", { onClick: reset, className: "text-slate-400 hover:text-white transition-all", title: "Reset" }, React.createElement(RotateCcw, { size: 18 })),
-                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "text-slate-400 hover:text-white disabled:opacity-30 transition-all" }, React.createElement(SkipBack, { size: 18 })),
-                            React.createElement("button", { onClick: togglePlay, className: "p-2 bg-orange-600 hover:bg-orange-500 text-white rounded-full shadow-lg transition-all hover:scale-105 active:scale-95" },
-                                isPlaying ? React.createElement(Pause, { size: 20, fill: "currentColor" }) : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
-                            ),
-                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "text-slate-400 hover:text-white disabled:opacity-30 transition-all" }, React.createElement(SkipForward, { size: 18 }))
-                        )
-                    )
-                ),
-
-                /* Settings Bar (Nodes & Density) */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex flex-wrap items-center justify-end gap-6 sm:gap-10 shadow-sm z-10" },
-                    /* Nodes Slider */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        React.createElement("span", { className: "text-xs text-slate-400 font-bold uppercase tracking-wider" }, "Nodes"),
-                        React.createElement("input", {
-                            type: "range", min: "4", max: "15", step: "1",
-                            value: nodeCount,
-                            onChange: (e) => setNodeCount(Number(e.target.value)),
-                            disabled: isPlaying,
-                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-orange-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-sm text-slate-200 font-mono font-medium min-w-[1.5rem] text-center" }, nodeCount)
-                    ),
-                    
-                    /* Density Slider */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        React.createElement("span", { className: "text-xs text-slate-400 font-bold uppercase tracking-wider" }, "Density"),
-                        React.createElement("input", {
-                            type: "range", min: "0", max: "2", step: "0.1",
-                            value: density,
-                            onChange: (e) => setDensity(Number(e.target.value)),
-                            disabled: isPlaying,
-                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-sm text-slate-200 font-mono font-medium min-w-[1.5rem] text-center" }, density.toFixed(1))
-                    )
-                ),
-
-                /* Instructions */
-                React.createElement("div", { className: "w-full max-w-5xl min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center gap-4 shadow-sm" },
-                    React.createElement("p", { className: "text-md text-orange-100 font-medium animate-fade-in text-center" }, currentStep.description)
-                ),
-
-                /* Main Content */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 sm:p-6 flex flex-col gap-6" },
-                    
-                    /* Legend */
-                    React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300 border-b border-slate-700 pb-4" },
-                        React.createElement("div", { className: "flex items-center gap-2" }, React.createElement("div", { className: "w-3 h-3 rounded-full border-2 border-slate-500" }), " Disjoint Sets"),
-                        React.createElement("div", { className: "flex items-center gap-2" }, React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.processing } }), " Processing Edge"),
-                        React.createElement("div", { className: "flex items-center gap-2" }, React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.accepted } }), " Accepted (MST)"),
-                        React.createElement("div", { className: "flex items-center gap-2" }, React.createElement("div", { className: "w-3 h-3 rounded-full bg-red-500 opacity-50" }), " Rejected (Cycle)")
-                    ),
-
-                    /* Canvas */
-                    React.createElement("div", { 
-                        className: `relative w-full h-[500px] sm:h-[600px] bg-slate-900 rounded-lg border border-slate-700 overflow-hidden shadow-inner ${isPanning ? 'cursor-grabbing' : 'grab-cursor'}`,
-                        onMouseDown: handleCanvasMouseDown, onMouseMove: handleMouseMove, onMouseUp: handleMouseUp, onMouseLeave: handleMouseUp
-                    },
-                        React.createElement("div", { className: "absolute inset-0 pointer-events-none opacity-20", style: { backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)', backgroundSize: '20px 20px', transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center' } }),
-                        
-                        /* MST Weight Indicator */
-                        React.createElement("div", { className: "absolute top-4 right-4 z-10 bg-slate-800/90 p-3 rounded-lg shadow-xl border border-slate-700 backdrop-blur-sm flex flex-col items-center min-w-[100px]" },
-                            React.createElement("span", { className: "text-[10px] text-slate-400 uppercase tracking-wider" }, "MST Weight"),
-                            React.createElement("span", { className: "text-xl font-mono font-bold text-emerald-400" }, currentStep.totalWeight)
-                        ),
-
-                        React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full" },
-                            React.createElement("g", { style: { transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: 'center', transition: (isPanning || draggingNode !== null) ? 'none' : 'transform 0.1s ease-out' } },
-                                
-                                /* Edges */
-                                graph.edges.map((edge) => {
-                                    const s = graph.nodes.find(n => n.id === edge.source);
-                                    const t = graph.nodes.find(n => n.id === edge.target);
-                                    if (!s || !t) return null;
-                                    const style = getEdgeStyle(edge.id, edge.source, edge.target);
-                                    
-                                    return React.createElement("g", { key: edge.id, className: "pointer-events-none" },
-                                        React.createElement("line", {
-                                            x1: s.x, y1: s.y, x2: t.x, y2: t.y,
-                                            stroke: style.color, strokeWidth: style.width,
-                                            strokeDasharray: style.dashed ? "8,8" : "none",
-                                            opacity: style.opacity,
-                                            className: "line-transition"
-                                        }),
-                                        React.createElement("circle", {
-                                            cx: (s.x + t.x) / 2, cy: (s.y + t.y) / 2,
-                                            r: 12, fill: "#1e293b", stroke: style.color, strokeWidth: 1
-                                        }),
-                                        React.createElement("text", {
-                                            x: (s.x + t.x) / 2, y: (s.y + t.y) / 2,
-                                            dy: 4, textAnchor: "middle", fill: "#94a3b8", fontSize: 11, fontWeight: "bold"
-                                        }, edge.weight)
-                                    );
-                                }),
-
+                        /* Left Sidebar */
+                        React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
+                            
+                            /* Settings */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                    React.createElement(Settings, { size: 14 }), "Settings"
+                                ),
                                 /* Nodes */
-                                graph.nodes.map((node) => {
-                                    const isDraggingThis = draggingNode === node.id;
-                                    const color = getNodeColor(node.id);
-                                    return React.createElement("g", { 
-                                        key: node.id, 
-                                        className: `node-transition node-interactive ${isDraggingThis ? 'cursor-grabbing' : 'cursor-grab'}`,
-                                        onMouseDown: (e) => handleNodeMouseDown(e, node.id)
-                                    },
-                                        React.createElement("circle", {
-                                            cx: node.x, cy: node.y, r: 28,
-                                            fill: color, stroke: isDraggingThis ? '#fff' : "#0f172a", strokeWidth: 4,
-                                            className: "node-transition shadow-lg"
-                                        }),
-                                        React.createElement("text", {
-                                            x: node.x, y: node.y, dy: 5,
-                                            textAnchor: "middle", fill: "rgba(255,255,255,0.9)",
-                                            fontWeight: "bold", fontSize: 16,
-                                            className: "pointer-events-none select-none shadow-black drop-shadow-md"
-                                        }, node.label)
-                                    );
-                                })
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Graph Size"),
+                                        React.createElement("span", { className: "text-xs font-mono text-indigo-300 bg-indigo-900/30 px-2 py-0.5 rounded" }, nodeCount)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "4", max: "15", step: "1",
+                                        value: nodeCount,
+                                        onChange: (e) => setNodeCount(Number(e.target.value)),
+                                        disabled: isPlaying,
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                                    })
+                                ),
+                                /* Density */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Edge Density"),
+                                        React.createElement("span", { className: "text-xs font-mono text-purple-300 bg-purple-900/30 px-2 py-0.5 rounded" }, edgeDensity.toFixed(1))
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "0", max: "2", step: "0.1",
+                                        value: edgeDensity,
+                                        onChange: (e) => setEdgeDensity(Number(e.target.value)),
+                                        disabled: isPlaying,
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50"
+                                    })
+                                )
+                            ),
+
+                            /* Controls */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                    React.createElement(Activity, { size: 14 }), "Playback Controls"
+                                ),
+                                React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                    React.createElement("button", { onClick: reset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "Reset" },
+                                        React.createElement(RotateCcw, { size: 18 })
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                            React.createElement(SkipBack, { size: 18 })
+                                        ),
+                                        React.createElement("button", { 
+                                            onClick: togglePlay, 
+                                            className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                                        },
+                                            isPlaying 
+                                                ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                                : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                        ),
+                                        React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                            React.createElement(SkipForward, { size: 18 })
+                                        )
+                                    )
+                                ),
+                                React.createElement("div", { className: "h-px w-full bg-slate-700/50 my-1" }),
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                        React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "100", max: "1900", step: "100",
+                                        value: animationSpeed,
+                                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    })
+                                )
                             )
                         ),
-                        /* Zoom Controls */
-                        React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-2 rounded-lg shadow-xl border border-slate-700" },
-                            React.createElement("button", { onClick: handleZoomIn, className: "p-2 hover:bg-slate-700 text-slate-300 rounded", title: "Zoom In" }, React.createElement(ZoomIn, { size: 20 })),
-                            React.createElement("button", { onClick: handleZoomOut, className: "p-2 hover:bg-slate-700 text-slate-300 rounded", title: "Zoom Out" }, React.createElement(ZoomOut, { size: 20 })),
-                            React.createElement("div", { className: "h-px bg-slate-700 w-full my-1" }),
-                            React.createElement("button", { onClick: handleFitView, className: "p-2 hover:bg-slate-700 text-blue-400 rounded", title: "Fit to Screen" }, React.createElement(Maximize, { size: 20 }))
-                        )
-                    ),
 
-                    /* New Component: Union-Find Visualization */
-                    React.createElement("div", { className: "flex flex-col gap-2 border-b border-slate-700 pb-4" },
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement(Database, { size: 16, className: "text-slate-500" }),
-                            React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider" }, "Union-Find Data Structure (Sets)")
-                        ),
-                        React.createElement("div", { className: "grid grid-cols-4 sm:grid-cols-8 gap-3" },
-                            graph.nodes.map((node) => {
-                                const rootId = currentStep.nodeSets[node.id];
-                                const rootNode = graph.nodes.find(n => n.id === rootId);
-                                const color = getNodeColor(node.id);
-                                const isRoot = node.id === rootId;
+                        /* Right Content */
+                        React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4 min-w-0" },
+                            
+                            /* Description */
+                            React.createElement("div", { className: "w-full min-h-[60px] bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center text-center shadow-sm" },
+                                React.createElement("p", { className: "text-md text-indigo-100 font-medium animate-fade-in" }, currentStep.description)
+                            ),
 
-                                return React.createElement("div", { 
-                                    key: node.id, 
-                                    className: "flex flex-col items-center p-3 rounded-lg bg-slate-900 border transition-all duration-300",
-                                    style: { 
-                                        borderColor: isRoot ? color : 'rgba(51, 65, 85, 0.5)', 
-                                        borderWidth: isRoot ? 2 : 1,
-                                        boxShadow: isRoot ? `0 0 10px -2px ${color}40` : 'none'
-                                    }
-                                },
-                                    React.createElement("div", { 
-                                        className: "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white mb-2 shadow-md",
-                                        style: { backgroundColor: color }
-                                    }, node.label),
-                                    React.createElement("span", { className: "text-[10px] text-slate-500 uppercase tracking-wider mb-0.5" }, "Root"),
-                                    React.createElement("span", { className: "text-xs font-mono font-bold text-slate-300" },
-                                        rootNode ? rootNode.label : '-'
-                                    )
-                                );
-                            })
-                        )
-                    ),
-
-                    /* Bottom Panel: Sorted Edge List */
-                    React.createElement("div", { className: "flex flex-col gap-2" },
-                        React.createElement("div", { className: "flex justify-between items-end px-1" },
-                            React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider" }, "Sorted Edge Queue (Weight Ascending)"),
-                            React.createElement("span", { className: "text-[10px] text-slate-500" }, "Scrolls to follow algorithm")
-                        ),
-                        React.createElement("div", { ref: scrollRef, className: "flex gap-2 overflow-x-auto pb-4 pt-1 px-1" },
-                            currentStep.edgeQueue && currentStep.edgeQueue.map((edge) => {
-                                const s = graph.nodes.find(n => n.id === edge.source);
-                                const t = graph.nodes.find(n => n.id === edge.target);
-                                if (!s || !t) return null;
+                            /* Canvas Container */
+                            React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-4 sm:p-6 flex flex-col gap-6" },
                                 
-                                let statusClass = "bg-slate-700 border-slate-600 opacity-50";
-                                let icon = null;
-                                
-                                if (edge.status === 'processing') {
-                                    statusClass = "bg-amber-900/40 border-amber-400 scale-105 shadow-lg shadow-amber-900/20 opacity-100 ring-1 ring-amber-400";
-                                } else if (edge.status === 'accepted') {
-                                    statusClass = "bg-sky-900/30 border-sky-500 opacity-100";
-                                    icon = React.createElement(CheckCircle2, { size: 12, className: "text-sky-500" });
-                                } else if (edge.status === 'rejected') {
-                                    statusClass = "bg-red-900/20 border-red-800 opacity-40 grayscale";
-                                    icon = React.createElement(XCircle, { size: 12, className: "text-red-500" });
-                                }
-
-                                return React.createElement("div", { 
-                                    key: edge.id, 
-                                    className: `flex flex-col items-center justify-center min-w-[4rem] h-16 rounded-lg border transition-all duration-300 flex-shrink-0 ${statusClass}`
-                                },
-                                    React.createElement("div", { className: "flex items-center gap-1 mb-1" },
-                                        React.createElement("span", { className: "text-xs text-slate-400 font-bold" }, `${s.label}-${t.label}`),
-                                        icon
+                                /* Legend (Updated for Kruskal) */
+                                React.createElement("div", { className: "flex flex-wrap justify-center sm:justify-end gap-x-6 gap-y-2 text-xs text-slate-300 border-b border-slate-700 pb-4" },
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-3 h-3 rounded-full border border-slate-500", style: { background: 'linear-gradient(45deg, #3b82f6, #ec4899)' } }), " Node Set Color"
                                     ),
-                                    React.createElement("span", { className: "font-mono text-lg text-white" }, edge.weight)
-                                );
-                            })
-                        )
-                    ),
-                    
-                    /* Footer */
-                    React.createElement("div", { className: "w-full flex justify-between items-center text-xs text-slate-500 border-t border-slate-700 pt-4 mt-2" },
-                        React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
-                        React.createElement("div", { className: "hidden sm:block w-1/3 h-1 bg-slate-700 rounded-full mx-4" },
-                            React.createElement("div", { className: "h-full bg-orange-500 rounded-full transition-all duration-100", style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` } })
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            isFinished && React.createElement(CheckCircle2, { size: 14, className: "text-emerald-500" }),
-                            React.createElement("span", { className: isFinished ? "text-emerald-500" : "" }, isFinished ? "MST Complete" : "Processing Edges...")
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.checking } }), " Checking Edge"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.mstEdge } }), " Added to MST"
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("div", { className: "w-3 h-3 rounded-full", style: { backgroundColor: COLORS.rejected } }), " Cycle (Rejected)"
+                                    )
+                                ),
+
+                                /* Canvas */
+                                React.createElement("div", { 
+                                    className: `relative w-full h-[500px] sm:h-[600px] bg-slate-900 rounded-lg border border-slate-700 overflow-hidden shadow-inner ${isPanning ? 'cursor-grabbing' : 'grab-cursor'}`,
+                                    onMouseDown: handleCanvasMouseDown,
+                                    onMouseMove: handleMouseMove,
+                                    onMouseUp: handleMouseUp,
+                                    onMouseLeave: handleMouseUp
+                                },
+                                    /* Grid */
+                                    React.createElement("div", { 
+                                        className: "absolute inset-0 pointer-events-none opacity-20", 
+                                        style: { 
+                                            backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)', 
+                                            backgroundSize: '20px 20px',
+                                            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                                            transformOrigin: 'center'
+                                        } 
+                                    }),
+
+                                    /* SVG */
+                                    React.createElement("svg", { width: "100%", height: "100%", viewBox: `0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`, className: "w-full h-full" },
+                                        React.createElement("g", { 
+                                            style: { 
+                                                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                                                transformOrigin: 'center',
+                                                transition: (isPanning || draggingNode !== null) ? 'none' : 'transform 0.1s ease-out'
+                                            }
+                                        },
+                                            /* Edges */
+                                            graph.edges.map((edge, idx) => {
+                                                const s = graph.nodes.find(n => n.id === edge.source);
+                                                const t = graph.nodes.find(n => n.id === edge.target);
+                                                if (!s || !t) return null;
+                                                const color = getEdgeColor(edge.source, edge.target);
+                                                const width = getEdgeWidth(edge.source, edge.target);
+                                                const opacity = getEdgeOpacity(edge.source, edge.target);
+
+                                                return React.createElement("g", { key: `edge-${idx}`, className: "pointer-events-none line-transition", style: { opacity } },
+                                                    React.createElement("line", {
+                                                        x1: s.x, y1: s.y, x2: t.x, y2: t.y,
+                                                        stroke: color, strokeWidth: width,
+                                                        className: "line-transition"
+                                                    }),
+                                                    React.createElement("circle", {
+                                                        cx: (s.x + t.x) / 2, cy: (s.y + t.y) / 2,
+                                                        r: 12, fill: "#1e293b", stroke: color, strokeWidth: 1
+                                                    }),
+                                                    React.createElement("text", {
+                                                        x: (s.x + t.x) / 2, y: (s.y + t.y) / 2,
+                                                        dy: 4, textAnchor: "middle", fill: "#94a3b8", fontSize: 11, fontWeight: "bold"
+                                                    }, edge.weight)
+                                                );
+                                            }),
+
+                                            /* Nodes */
+                                            graph.nodes.map((node) => {
+                                                const isDraggingThis = draggingNode === node.id;
+                                                const nodeColor = getNodeColor(node.id);
+                                                const isRoot = currentStep.components[node.id] === node.id;
+
+                                                return React.createElement("g", { 
+                                                    key: `node-${node.id}`, 
+                                                    className: `node-transition node-interactive ${isDraggingThis ? 'cursor-grabbing' : 'cursor-grab'}`,
+                                                    onMouseDown: (e) => handleNodeMouseDown(e, node.id)
+                                                },
+                                                    React.createElement("circle", {
+                                                        cx: node.x, cy: node.y, r: 30,
+                                                        fill: nodeColor,
+                                                        stroke: isDraggingThis ? '#fff' : "#0f172a", 
+                                                        strokeWidth: isDraggingThis ? 5 : 4,
+                                                        className: "node-transition"
+                                                    }),
+                                                    React.createElement("text", {
+                                                        x: node.x, y: node.y, dy: 5,
+                                                        textAnchor: "middle", fill: "#fff",
+                                                        fontWeight: "bold", fontSize: 16,
+                                                        className: "pointer-events-none"
+                                                    }, node.label)
+                                                );
+                                            })
+                                        )
+                                    ),
+                                    
+                                    /* MST Weight */
+                                    React.createElement("div", { className: "absolute top-4 right-4 bg-slate-800/90 p-3 rounded-lg border border-slate-700 shadow-xl backdrop-blur-sm flex flex-col items-center min-w-[100px]" },
+                                        React.createElement("span", { className: "text-[10px] text-slate-400 uppercase tracking-widest font-bold" }, "MST Weight"),
+                                        React.createElement("span", { className: "text-2xl font-mono font-bold text-emerald-400 mt-1" }, currentStep.mstWeight || 0)
+                                    ),
+
+                                    /* Zoom Controls */
+                                    React.createElement("div", { className: "absolute bottom-4 right-4 flex flex-col gap-2 bg-slate-800/90 p-2 rounded-lg shadow-xl border border-slate-700" },
+                                        React.createElement("button", { onClick: handleZoomIn, className: "p-2 hover:bg-slate-700 text-slate-300 rounded transition-colors" }, React.createElement(ZoomIn, { size: 20 })),
+                                        React.createElement("button", { onClick: handleZoomOut, className: "p-2 hover:bg-slate-700 text-slate-300 rounded transition-colors" }, React.createElement(ZoomOut, { size: 20 })),
+                                        React.createElement("div", { className: "h-px bg-slate-700 w-full my-1" }),
+                                        React.createElement("button", { onClick: handleFitView, className: "p-2 hover:bg-slate-700 text-indigo-400 rounded transition-colors" }, React.createElement(Maximize, { size: 20 }))
+                                    )
+                                ),
+
+                                /* Disjoint Set Status (Updated from Keys) */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "Disjoint Set IDs (Component Membership)"),
+                                    React.createElement("div", { className: "flex gap-2 overflow-x-auto pb-2" },
+                                        graph.nodes.map(node => {
+                                            const setId = currentStep.components[node.id];
+                                            const color = SET_COLORS[setId % SET_COLORS.length];
+                                            const rootLabel = graph.nodes[setId]?.label || "?";
+                                            
+                                            return React.createElement("div", { key: node.id, className: `flex flex-col items-center justify-center min-w-[3.5rem] h-16 rounded-lg border border-slate-700 bg-slate-800/50` },
+                                                React.createElement("span", { className: "text-xs text-slate-400 font-bold mb-1" }, node.label),
+                                                React.createElement("div", { 
+                                                    className: "px-2 py-0.5 rounded text-xs font-mono font-bold text-white",
+                                                    style: { backgroundColor: color }
+                                                }, rootLabel)
+                                            );
+                                        })
+                                    )
+                                ),
+
+                                /* Sorted Edge Queue */
+                                React.createElement("div", { className: "flex flex-col gap-2 mt-2" },
+                                    React.createElement("h3", { className: "text-xs font-bold text-slate-500 uppercase tracking-wider ml-1" }, "Sorted Edge Queue"),
+                                    React.createElement("div", { className: "flex gap-2 overflow-x-auto pb-2 min-h-[70px]" },
+                                        sortedEdges.map((edge, i) => {
+                                            const u = edge.source;
+                                            const v = edge.target;
+                                            const edgeKey = `${Math.min(u,v)}-${Math.max(u,v)}`;
+                                            
+                                            // Determine status
+                                            let status = 'pending';
+                                            if (currentStep.mstEdges.has(edgeKey)) status = 'accepted';
+                                            if (currentStep.rejectedEdges.has(edgeKey)) status = 'rejected';
+                                            
+                                            // Check if it's the specific edge currently being processed
+                                            const isCurrent = currentStep.currentEdge && 
+                                                              ((currentStep.currentEdge.source === u && currentStep.currentEdge.target === v) || 
+                                                               (currentStep.currentEdge.source === v && currentStep.currentEdge.target === u));
+                                            
+                                            let bgClass = "bg-slate-800 border-slate-700 text-slate-500";
+                                            let scaleClass = "scale-100";
+                                            
+                                            if (status === 'accepted') bgClass = "bg-emerald-900/30 border-emerald-500/50 text-emerald-400";
+                                            if (status === 'rejected') bgClass = "bg-red-900/20 border-red-500/30 text-red-400 opacity-40";
+                                            
+                                            // Active highlight overrides others visually for focus, but keeps color context if possible
+                                            if (isCurrent) {
+                                                bgClass = "bg-amber-500/20 border-amber-500 text-amber-300 ring-1 ring-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]";
+                                                scaleClass = "scale-110 z-10 mx-1";
+                                            }
+
+                                            // Access nodes safely
+                                            const nodeA = graph.nodes.find(n => n.id === u);
+                                            const nodeB = graph.nodes.find(n => n.id === v);
+
+                                            return React.createElement("div", { 
+                                                key: `queue-${i}`,
+                                                className: `flex flex-col items-center justify-center min-w-[3.5rem] h-16 rounded-lg border transition-all duration-300 ${bgClass} ${scaleClass}`
+                                            },
+                                                React.createElement("span", { className: "text-lg font-mono font-bold leading-none" }, edge.weight),
+                                                React.createElement("span", { className: "text-[10px] uppercase font-bold mt-1 opacity-80" }, 
+                                                    (nodeA && nodeB) ? `${nodeA.label}-${nodeB.label}` : '?'
+                                                )
+                                            );
+                                        })
+                                    )
+                                ),
+                                
+                                /* Footer */
+                                React.createElement("div", { className: "w-full flex justify-between items-center text-xs text-slate-500 border-t border-slate-700 pt-4 mt-2" },
+                                    React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                                    React.createElement("div", { className: "hidden sm:block w-1/3 h-1 bg-slate-700 rounded-full mx-4" },
+                                        React.createElement("div", { 
+                                            className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                            style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
+                                        })
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        isFinished && React.createElement(CheckCircle2, { size: 14, className: "text-emerald-500" }),
+                                        React.createElement("span", { className: isFinished ? "text-emerald-500" : "" }, 
+                                            isFinished ? "MST Completed" : "Merging Sets..."
+                                        )
+                                    )
+                                )
+                            )
                         )
                     )
-                )
                 )
             );
         };

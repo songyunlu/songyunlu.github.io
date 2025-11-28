@@ -20,7 +20,7 @@
     </script>
 
     <style>
-        /* Custom Scrollbar for cleaner look */
+        /* Custom Scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -56,7 +56,7 @@
     <script type="module">
         import React, { useState, useEffect, useRef, useCallback } from 'react';
         import { createRoot } from 'react-dom/client';
-        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Settings, ArrowDown } from 'lucide-react';
+        import { Play, Pause, SkipBack, SkipForward, RotateCcw, Settings, ArrowDown, Activity, ArrowRightLeft, Hash } from 'lucide-react';
 
         const InsertionSortVisualizer = () => {
             // -- State --
@@ -90,13 +90,17 @@
                 const stepsLog = [];
                 const arr = [...initialArray]; 
                 const n = arr.length;
+                
+                let compareCount = 0;
+                let swapCount = 0;
 
                 stepsLog.push({
                     array: [...arr],
                     type: 'initial',
                     highlights: [],
                     keyIndex: null,
-                    sortedLimit: 0, // Index up to which is sorted
+                    sortedLimit: 0,
+                    counts: { compares: 0, swaps: 0 },
                     description: "Initial array. The first element (index 0) is trivially sorted."
                 });
 
@@ -109,54 +113,67 @@
                     stepsLog.push({
                         array: [...arr],
                         type: 'select_key',
-                        highlights: [i], // Highlight the key
+                        highlights: [i], 
                         keyIndex: i,
                         sortedLimit: i - 1,
+                        counts: { compares: compareCount, swaps: swapCount },
                         description: `Selected ${key} at index ${i} as the 'Key' to insert into the sorted portion.`
                     });
 
-                    while (j >= 0 && arr[j] > key) {
-                        // Step: Compare
+                    // While loop logic adapted to capture every comparison
+                    while (j >= 0) {
+                        // We are about to compare arr[j] with key
+                        compareCount++;
+
                         stepsLog.push({
                             array: [...arr],
                             type: 'compare',
-                            highlights: [j, j + 1], // Compare j with where key currently is (conceptually)
-                            keyIndex: j + 1, // Visually track where the "hole" for the key is
-                            sortedLimit: i, // The whole processed area
-                            description: `Compare: ${arr[j]} > ${key} (Key). Since it's larger, we must shift ${arr[j]} to the right.`
+                            highlights: [j, j + 1], 
+                            keyIndex: j + 1, 
+                            sortedLimit: i, 
+                            counts: { compares: compareCount, swaps: swapCount },
+                            description: `Checking index ${j}: Compare ${arr[j]} > ${key} (Key)?`
                         });
 
-                        // Step: Shift
-                        arr[j + 1] = arr[j];
-                        stepsLog.push({
-                            array: [...arr],
-                            type: 'overwrite',
-                            highlights: [j + 1], // The position being overwritten
-                            keyIndex: j, // The "hole" moves left
-                            sortedLimit: i,
-                            description: `Shifted ${arr[j]} to position ${j + 1}.`
-                        });
-                        
-                        j = j - 1;
+                        if (arr[j] > key) {
+                            // Swap / Shift happens
+                            swapCount++;
+                            arr[j + 1] = arr[j];
+                            
+                            stepsLog.push({
+                                array: [...arr],
+                                type: 'overwrite',
+                                highlights: [j + 1], 
+                                keyIndex: j, // Hole moves left
+                                sortedLimit: i,
+                                counts: { compares: compareCount, swaps: swapCount },
+                                description: `${arr[j]} > ${key}. Shifting ${arr[j]} to the right.`
+                            });
+                            
+                            j = j - 1;
+                        } else {
+                            // Comparison failed, loop breaks
+                             stepsLog.push({
+                                array: [...arr],
+                                type: 'compare',
+                                highlights: [j, j + 1],
+                                keyIndex: j + 1, 
+                                sortedLimit: i,
+                                counts: { compares: compareCount, swaps: swapCount },
+                                description: `${arr[j]} <= ${key}. Found the correct spot.`
+                            });
+                            break;
+                        }
                     }
 
-                    // Step: Final Comparison (if j >= 0, we failed the loop condition because arr[j] <= key)
-                    if (j >= 0) {
-                         stepsLog.push({
-                            array: [...arr],
-                            type: 'compare',
-                            highlights: [j, j + 1],
-                            keyIndex: j + 1, 
-                            sortedLimit: i,
-                            description: `Compare: ${arr[j]} <= ${key} (Key). Found the correct spot.`
-                        });
-                    } else if (j === -1) {
+                    if (j === -1) {
                          stepsLog.push({
                             array: [...arr],
                             type: 'compare',
                             highlights: [0],
                             keyIndex: 0, 
                             sortedLimit: i,
+                            counts: { compares: compareCount, swaps: swapCount },
                             description: `Reached start of array. Inserting Key at index 0.`
                         });
                     }
@@ -169,6 +186,7 @@
                         highlights: [j + 1],
                         keyIndex: null, // Key is placed
                         sortedLimit: i,
+                        counts: { compares: compareCount, swaps: swapCount },
                         description: `Inserted Key (${key}) at index ${j + 1}. Sorted portion is now 0 to ${i}.`
                     });
                 }
@@ -179,6 +197,7 @@
                     highlights: [],
                     keyIndex: null,
                     sortedLimit: n - 1,
+                    counts: { compares: compareCount, swaps: swapCount },
                     description: "Sorting Complete. The array is now fully sorted."
                 });
 
@@ -250,7 +269,13 @@
 
 
             // -- Render Helpers --
-            const getCurrentStep = () => steps[currentStepIndex] || { array: array, description: "Ready to sort", type: 'initial', sortedLimit: -1 };
+            const getCurrentStep = () => steps[currentStepIndex] || { 
+                array: array, 
+                description: "Ready to sort", 
+                type: 'initial', 
+                sortedLimit: -1,
+                counts: { compares: 0, swaps: 0 }
+            };
 
             const getBarColor = (index) => {
                 const step = getCurrentStep();
@@ -288,155 +313,196 @@
             const currentData = steps[currentStepIndex]?.array || array;
             const currentDesc = steps[currentStepIndex]?.description || "Press Play to start sorting.";
             const currentKeyIndex = steps[currentStepIndex]?.keyIndex;
+            const currentCounts = steps[currentStepIndex]?.counts || { compares: 0, swaps: 0 };
 
             return (
                 React.createElement("div", { className: "flex flex-col items-center justify-center min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-8" },
                 
-                /* Top Bar Wrapper */
-                React.createElement("div", { className: "w-full max-w-5xl mb-4 flex flex-col lg:flex-row items-center justify-between gap-6" },
-                    
-                    /* Title (Standalone Left) */
-                    React.createElement("div", { className: "flex items-center gap-3 w-full lg:w-auto justify-start" },
+                    /* Title Row */
+                    React.createElement("div", { className: "w-full max-w-7xl mb-6 flex items-center gap-3 justify-start" },
                         React.createElement(Settings, { size: 32, className: "text-indigo-400" }),
                         React.createElement("h1", { className: "text-2xl sm:text-3xl font-bold text-indigo-400 whitespace-nowrap tracking-tight" }, "Insertion Sort")
                     ),
 
-                    /* Controls (Pill-shaped Container Right) */
-                    /* Updated justify-center to justify-end for right alignment on responsive/mobile views */
-                    React.createElement("div", { className: "flex flex-wrap items-center justify-end gap-4 sm:gap-6 bg-slate-800 rounded-xl sm:rounded-full px-4 sm:px-6 py-3 sm:py-2 border border-slate-700 shadow-xl w-full lg:w-auto" },
-                        
-                        /* Speed Slider (Size moved out) */
-                        React.createElement("div", { className: "flex items-center gap-3" },
-                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Speed"),
-                            React.createElement("input", {
-                                type: "range", min: "100", max: "1900", step: "100",
-                                value: animationSpeed,
-                                onChange: (e) => setAnimationSpeed(Number(e.target.value)),
-                                className: "w-16 sm:w-24 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                            })
-                        ),
+                    /* Main Layout: Sidebar (Left) + Vis (Right) */
+                    React.createElement("div", { className: "flex flex-col lg:flex-row gap-6 w-full max-w-7xl items-start" },
 
-                        /* Separator */
-                        React.createElement("div", { className: "h-8 w-px bg-slate-700 hidden sm:block mx-2" }),
-
-                        /* Playback Buttons */
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("button", { onClick: reset, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors", title: "Reset" },
-                                React.createElement(RotateCcw, { size: 18 })
-                            ),
-                            React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
-                                React.createElement(SkipBack, { size: 18 })
-                            ),
-                            React.createElement("button", { 
-                                onClick: togglePlay, 
-                                className: "p-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
-                            },
-                                isPlaying 
-                                    ? React.createElement(Pause, { size: 20, fill: "currentColor" }) 
-                                    : React.createElement(Play, { size: 20, fill: "currentColor", className: "ml-0.5" })
-                            ),
-                            React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-2 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-full transition-colors" },
-                                React.createElement(SkipForward, { size: 18 })
-                            )
-                        )
-                    )
-                ),
-
-                /* New Size Slider Block - Styled to match Reference App Settings Bar */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 border border-slate-700 rounded-xl p-4 mb-4 flex items-center justify-end shadow-sm" },
-                    /* Size Slider */
-                    React.createElement("div", { className: "flex items-center gap-3" },
-                        React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "Size"),
-                        React.createElement("input", {
-                            type: "range", min: "5", max: "25", step: "1",
-                            value: arraySize,
-                            onChange: (e) => setArraySize(Number(e.target.value)),
-                            disabled: isPlaying,
-                            className: "w-16 sm:w-20 h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
-                        }),
-                        React.createElement("span", { className: "text-xs text-slate-300 w-4 text-center font-mono" }, arraySize)
-                    )
-                ),
-
-                /* Description Box */
-                React.createElement("div", { className: "w-full max-w-5xl min-h-[70px] bg-slate-800 rounded-xl border border-slate-700 p-4 mb-4 flex items-center justify-center shadow-lg" },
-                    React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
-                ),
-
-                /* Main Content */
-                React.createElement("div", { className: "w-full max-w-5xl bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-4" },
-                    
-                    /* Legend (Top Right) */
-                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 w-full" },
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.key}` }), "Key"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.compare}` }), "Compare"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.overwrite}` }), "Shift"
-                        ),
-                        React.createElement("div", { className: "flex items-center gap-2" },
-                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.sorted}` }), "Sorted"
-                        )
-                    ),
-
-                    /* Divider after Legend */
-                    React.createElement("div", { className: "w-full h-px bg-slate-700/50 my-1" }),
-
-                    /* Array Representation */
-                    React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
-                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Representation"),
-                    React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 px-4" },
-                        currentData.map((val, idx) => 
-                        React.createElement("div", { 
-                            key: idx, 
-                            className: `relative w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 border border-slate-600
-                            ${idx === currentKeyIndex ? 'border-indigo-400 border-2 -translate-y-2 shadow-indigo-500/50 shadow-md bg-indigo-900 text-indigo-100' : 'bg-slate-800 text-slate-300'}
-                            ${getOpacity(idx)}`
-                        },
-                            React.createElement("span", null, val),
-                            React.createElement("span", { className: "text-[9px] font-normal text-slate-500 leading-none mt-1" }, idx),
+                        /* Sidebar: Controls & Settings */
+                        React.createElement("div", { className: "w-full lg:w-72 flex flex-col gap-4 shrink-0" },
                             
-                            /* Render little arrow if this is the key */
-                            idx === currentKeyIndex && React.createElement("div", { className: "absolute -bottom-5 text-indigo-400 animate-bounce" }, 
-                                React.createElement(ArrowDown, { size: 14 })
+                            /* Settings Card (Moved to Top) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-6" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider" },
+                                    React.createElement(Settings, { size: 14 }), "Settings"
+                                ),
+                                
+                                /* Size Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Array Size"),
+                                        React.createElement("span", { className: "text-xs font-mono text-indigo-300 bg-indigo-900/30 px-2 py-0.5 rounded" }, arraySize)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "5", max: "25", step: "1",
+                                        value: arraySize,
+                                        onChange: (e) => setArraySize(Number(e.target.value)),
+                                        disabled: isPlaying,
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50"
+                                    })
+                                )
+                            ),
+                            
+                            /* Playback Controls Card (Moved to Bottom) */
+                            React.createElement("div", { className: "bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-lg flex flex-col gap-4" },
+                                React.createElement("div", { className: "flex items-center gap-2 text-slate-400 text-xs font-bold uppercase tracking-wider mb-1" },
+                                    React.createElement(Activity, { size: 14 }), "Playback Controls"
+                                ),
+                                React.createElement("div", { className: "flex items-center justify-between gap-2" },
+                                    React.createElement("button", { onClick: reset, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 rounded-xl transition-colors bg-slate-700/30", title: "Reset" },
+                                        React.createElement(RotateCcw, { size: 18 })
+                                    ),
+                                    React.createElement("div", { className: "flex items-center gap-2" },
+                                        React.createElement("button", { onClick: handlePrev, disabled: currentStepIndex === 0, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                            React.createElement(SkipBack, { size: 18 })
+                                        ),
+                                        React.createElement("button", { 
+                                            onClick: togglePlay, 
+                                            className: "p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95 mx-1"
+                                        },
+                                            isPlaying 
+                                                ? React.createElement(Pause, { size: 22, fill: "currentColor" }) 
+                                                : React.createElement(Play, { size: 22, fill: "currentColor", className: "ml-0.5" })
+                                        ),
+                                        React.createElement("button", { onClick: handleNext, disabled: currentStepIndex === steps.length - 1, className: "p-3 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-30 rounded-xl transition-colors bg-slate-700/30" },
+                                            React.createElement(SkipForward, { size: 18 })
+                                        )
+                                    )
+                                ),
+
+                                /* Divider */
+                                React.createElement("div", { className: "h-px w-full bg-slate-700/50 my-1" }),
+
+                                /* Speed Slider */
+                                React.createElement("div", { className: "flex flex-col gap-2" },
+                                    React.createElement("div", { className: "flex justify-between items-center" },
+                                        React.createElement("span", { className: "text-xs text-slate-400" }, "Animation Speed"),
+                                        React.createElement("span", { className: "text-xs font-mono text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded" }, `${(animationSpeed/1000).toFixed(1)}s`)
+                                    ),
+                                    React.createElement("input", {
+                                        type: "range", min: "100", max: "1900", step: "100",
+                                        value: animationSpeed,
+                                        onChange: (e) => setAnimationSpeed(Number(e.target.value)),
+                                        className: "w-full h-1.5 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+                                    })
+                                )
+                            )
+                        ),
+
+                        /* Main Content: Visualization */
+                        React.createElement("div", { className: "flex-1 w-full flex flex-col gap-4" },
+
+                            /* Description Box - FIXED HEIGHT (h-24) */
+                            React.createElement("div", { className: "w-full h-24 bg-slate-800 rounded-xl border border-slate-700 p-4 flex items-center justify-center shadow-lg" },
+                                React.createElement("p", { className: "text-lg text-slate-100 font-medium leading-relaxed text-center animate-fade-in" }, currentDesc)
+                            ),
+
+                            /* Main Vis Card */
+                            React.createElement("div", { className: "w-full bg-slate-800 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col gap-4" },
+                                
+                                /* Header Row: Counters & Legend */
+                                React.createElement("div", { className: "flex flex-col-reverse sm:flex-row justify-between items-center gap-4 w-full" },
+                                    
+                                    /* Counters (Left) */
+                                    React.createElement("div", { className: "flex items-center gap-3 self-start sm:self-center" },
+                                        /* Compares Pill */
+                                        React.createElement("div", { className: "flex items-center gap-2 px-3 py-1.5 bg-slate-900/50 rounded-lg border border-slate-700/50" },
+                                            React.createElement(Hash, { size: 14, className: "text-amber-500" }),
+                                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "COMPARES"),
+                                            React.createElement("span", { className: "text-sm font-bold text-slate-200 font-mono" }, currentCounts.compares)
+                                        ),
+                                        /* Swaps Pill */
+                                        React.createElement("div", { className: "flex items-center gap-2 px-3 py-1.5 bg-slate-900/50 rounded-lg border border-slate-700/50" },
+                                            React.createElement(ArrowRightLeft, { size: 14, className: "text-indigo-500" }),
+                                            React.createElement("span", { className: "text-[10px] sm:text-xs text-slate-400 font-bold tracking-wider uppercase" }, "SWAPS"),
+                                            React.createElement("span", { className: "text-sm font-bold text-slate-200 font-mono" }, currentCounts.swaps)
+                                        )
+                                    ),
+
+                                    /* Legend (Right) */
+                                    React.createElement("div", { className: "flex flex-wrap justify-end gap-x-6 gap-y-2 text-xs font-medium text-slate-300 self-end sm:self-center" },
+                                        React.createElement("div", { className: "flex items-center gap-2" },
+                                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.key}` }), "Key"
+                                        ),
+                                        React.createElement("div", { className: "flex items-center gap-2" },
+                                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.compare}` }), "Compare"
+                                        ),
+                                        React.createElement("div", { className: "flex items-center gap-2" },
+                                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.overwrite}` }), "Shift"
+                                        ),
+                                        React.createElement("div", { className: "flex items-center gap-2" },
+                                            React.createElement("div", { className: `w-2.5 h-2.5 rounded-full ${COLORS.sorted}` }), "Sorted"
+                                        )
+                                    )
+                                ),
+
+                                /* Divider after Legend */
+                                React.createElement("div", { className: "w-full h-px bg-slate-700/50 my-1" }),
+
+                                /* Array Representation */
+                                React.createElement("div", { className: "flex flex-col items-center w-full mt-2" },
+                                    React.createElement("h3", { className: "text-xs font-bold tracking-wider text-slate-500 mb-3 uppercase" }, "Array Values"),
+                                    React.createElement("div", { className: "flex justify-center w-full gap-1 sm:gap-2 px-4" },
+                                        currentData.map((val, idx) => 
+                                        React.createElement("div", { 
+                                            key: idx, 
+                                            // FIXED: Consistent border-2 to prevent layout shift
+                                            className: `relative w-full max-w-[3rem] aspect-square flex flex-col items-center justify-center rounded-md font-bold text-sm sm:text-lg transition-all duration-200 border-2 
+                                            ${idx === currentKeyIndex ? 'border-indigo-400 -translate-y-2 shadow-indigo-500/50 shadow-md bg-indigo-900 text-indigo-100' : 'bg-slate-800 text-slate-300 border-slate-600'}
+                                            ${getOpacity(idx)}`
+                                        },
+                                            React.createElement("span", null, val),
+                                            React.createElement("span", { className: "text-[9px] font-normal text-slate-500 leading-none mt-1" }, idx),
+                                            
+                                            /* Render little arrow if this is the key */
+                                            idx === currentKeyIndex && React.createElement("div", { className: "absolute -bottom-5 text-indigo-400 animate-bounce" }, 
+                                                React.createElement(ArrowDown, { size: 14 })
+                                            )
+                                        )
+                                        )
+                                    )
+                                ),
+
+                                /* Bar Chart */
+                                React.createElement("div", { className: "relative w-full h-64 sm:h-80 bg-slate-900/50 rounded-lg p-4 flex items-end justify-center overflow-hidden mt-4 border border-slate-800" },
+                                    React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
+                                    React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
+                                        currentData.map((val, idx) => {
+                                        const heightPct = (val / 60) * 100;
+                                        return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group ${getOpacity(idx)}` },
+                                            React.createElement("span", { className: "text-[10px] text-slate-200 mb-1 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
+                                            React.createElement("div", { 
+                                            className: `w-full rounded-t-md transition-all duration-200 ease-in-out ${getBarColor(idx)}`,
+                                            style: { height: `${heightPct}%` }
+                                            })
+                                        );
+                                        })
+                                    )
+                                ),
+
+                                /* Footer */
+                                React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 mt-2" },
+                                    React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
+                                    React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full" },
+                                        React.createElement("div", { 
+                                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
+                                        style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
+                                        })
+                                    ),
+                                    React.createElement("span", null, isSorted ? "Sorted" : "Sorting...")
+                                )
                             )
                         )
-                        )
                     )
-                    ),
-
-                    /* Bar Chart */
-                    React.createElement("div", { className: "relative w-full h-64 sm:h-80 bg-slate-900/50 rounded-lg p-4 flex items-end justify-center overflow-hidden mt-4 border border-slate-800" },
-                    React.createElement("div", { className: "absolute inset-0 opacity-5 pointer-events-none", style: { backgroundImage: 'radial-gradient(#94a3b8 1px, transparent 1px)', backgroundSize: '20px 20px' } }),
-                    React.createElement("div", { className: "flex items-end justify-center w-full h-full gap-1 sm:gap-2 z-10" },
-                        currentData.map((val, idx) => {
-                        const heightPct = (val / 60) * 100;
-                        return React.createElement("div", { key: idx, className: `h-full flex flex-col items-center justify-end w-full max-w-[3rem] group ${getOpacity(idx)}` },
-                            React.createElement("span", { className: "text-[10px] text-slate-200 mb-1 opacity-0 group-hover:opacity-100 transition-opacity" }, val),
-                            React.createElement("div", { 
-                            className: `w-full rounded-t-md transition-all duration-200 ease-in-out ${getBarColor(idx)}`,
-                            style: { height: `${heightPct}%` }
-                            })
-                        );
-                        })
-                    )
-                    ),
-
-                    /* Footer */
-                    React.createElement("div", { className: "w-full flex justify-between items-center text-sm text-slate-400 border-t border-slate-700 pt-4 mt-2" },
-                    React.createElement("span", null, `STEP ${currentStepIndex + 1} / ${steps.length}`),
-                    React.createElement("div", { className: "w-40 h-1 bg-slate-700 rounded-full" },
-                        React.createElement("div", { 
-                        className: "h-full bg-indigo-500 rounded-full transition-all duration-100",
-                        style: { width: `${((currentStepIndex + 1) / steps.length) * 100}%` }
-                        })
-                    ),
-                    React.createElement("span", null, isSorted ? "Sorted" : "Sorting...")
-                    )
-                )
                 )
             );
         };
